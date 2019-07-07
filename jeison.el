@@ -37,14 +37,40 @@
   "TODO"
   (declare (doc-string 4))
   `(progn
+     ;; create a usual EIEIO class and tag it as jeison class
      (defclass ,name ,superclasses ,slots :jeison t ,@options-and-doc)
+     ;; inject :path property into the newly created class
      (jeison--set-paths ',name ',slots)))
+
+(defun jeison-read (type alist-or-json &optional path)
+  "TODO"
+  (let* ((json (if (stringp alist-or-json)
+                   (json-read-from-string alist-or-json)
+                 alist-or-json))
+         (json (jeison--read-path json path)))
+    (pcase type
+      ((pred jeison-class-p) (jeison--read-class type json))
+      (_ json))))
+
+(defun jeison--read-class (class json)
+  "TODO"
+  (let ((arguments (cl-mapcan (lambda (slot) (jeison--read-slot slot json))
+                              (jeison--get-slots class))))
+    (apply class arguments)))
+
+(defun jeison--read-slot (slot json)
+  "TODO"
+  (list (oref slot initarg) (jeison-read (oref slot type) json (oref slot path))))
 
 (defun jeison--read-path (json path)
   "TODO"
   (pcase path
+    ;; unwrap one level of the path
     (`(,head . ,tail) (jeison--read-path (assoc-default head json) tail))
-    ('nil json)))
+    ;; the path is empty - nothing left to do here
+    ('nil json)
+    ;; path is not a list - assume that it's a one-level path
+    (_ (assoc-default path json))))
 
 (defun jeison--set-path (cl-slot slot-description)
   "TODO"
@@ -52,8 +78,8 @@
          (path (or (plist-get slot-options :path)
                    (cl--slot-descriptor-name cl-slot)))
          (slot-props (cl--slot-descriptor-props cl-slot))
-         (new-slot-props (append slot-props `((:path . ,path)))))
-    (setf (cl--slot-descriptor-props cl-slot) new-slot-props)))
+         (slot-props (append slot-props `((:path . ,path)))))
+    (setf (cl--slot-descriptor-props cl-slot) slot-props)))
 
 (defun jeison--set-paths (name slots)
   "TODO"
@@ -76,15 +102,33 @@
       (cl-find-class class-or-class-name)
     class-or-class-name))
 
+(defclass jeison--slot nil
+  ((name :initarg :name
+         :documentation "Name of the slot")
+   (initarg :initarg :initarg
+            :documentation "Constructor's argument of the slot")
+   (path :initarg :path
+         :documentation "JSON path to retrieve the slot")
+   (type :initarg :type
+         :documentation "Lisp type of the slot"))
+  :documentation "TODO")
+
 (defun jeison--get-slots (class-or-class-name)
   "TODO"
-  (mapcar #'jeison--get-slot (jeison--class-slots class-or-class-name)))
+  (cl-mapcar #'jeison--get-slot (jeison--class-slots class-or-class-name)
+             (jeison--initargs class-or-class-name)))
 
-(defun jeison--get-slot (raw-slot)
+(defun jeison--get-slot (raw-slot initarg)
   "TODO"
   (let ((props (cl--slot-descriptor-props raw-slot)))
-    (cons (cl--slot-descriptor-name raw-slot)
-          (assoc-default :path props))))
+    (jeison--slot :name (cl--slot-descriptor-name raw-slot)
+                  :initarg (car initarg)
+                  :type (cl--slot-descriptor-type raw-slot)
+                  :path (assoc-default :path props))))
+
+(defun jeison--initargs (class-or-class-name)
+  "TODO"
+  (eieio--class-initarg-tuples (jeison--find-class class-or-class-name)))
 
 (defun jeison--class-slots (class-or-class-name)
   "TODO"

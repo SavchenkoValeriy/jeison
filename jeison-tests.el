@@ -39,17 +39,29 @@
   (should (not (jeison-object-p 42))))
 
 (ert-deftest jeison:check-paths ()
-  (jeison-defclass jeison:jeison-class nil ((x :initarg :x :path (a b))
-                                            (y :initarg :y)))
+  (jeison-defclass jeison:jeison-class nil
+                   ((x :initarg :x :path (a b))
+                    (y :initarg :y :type list)))
   (let* ((slots (jeison--get-slots jeison:jeison-class))
          (x (car slots))
          (y (cadr slots)))
-    (should (eq 'x (car x)))
-    (should (equal '(a b) (cdr x)))
-    (should (eq 'y (car y)))
-    (should (equal 'y (cdr y)))))
+    (should (eq 'x (oref x name)))
+    (should (eq :x (oref x initarg)))
+    (should (eq t (oref x type)))
+    (should (equal '(a b) (oref x path)))
+    (should (eq 'y (oref y name)))
+    (should (eq :y (oref y initarg)))
+    (should (eq 'list (oref y type)))
+    (should (equal 'y (oref y path)))))
 
 (ert-deftest jeison:check-read-path-basic ()
   (should (equal 42 (jeison--read-path
                      (json-read-from-string "{\"a\": {\"b\": {\"c\": 42}}}")
                      '(a b c)))))
+
+(ert-deftest jeison:check-read-basic ()
+  (jeison-defclass jeison:jeison-class nil ((x :initarg :x :path (a b))
+                                            (y :initarg :y :path c)))
+  (let ((parsed (jeison-read jeison:jeison-class
+                             "{\"a\": {\"b\": 42}, \"c\": 36.6}")))
+    (should (equal (oref parsed x) 42))))
