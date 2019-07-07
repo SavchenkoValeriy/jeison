@@ -29,8 +29,9 @@
 ;; TODO
 
 ;;; Code:
-(require 'eieio)
 (require 'cl-lib)
+(require 'eieio)
+(require 'json)
 
 (defmacro jeison-defclass (name superclasses slots &rest options-and-doc)
   "TODO"
@@ -38,6 +39,12 @@
   `(progn
      (defclass ,name ,superclasses ,slots :jeison t ,@options-and-doc)
      (jeison--set-paths ',name ',slots)))
+
+(defun jeison--read-path (json path)
+  "TODO"
+  (pcase path
+    (`(,head . ,tail) (jeison--read-path (assoc-default head json) tail))
+    ('nil json)))
 
 (defun jeison--set-path (cl-slot slot-description)
   "TODO"

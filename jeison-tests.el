@@ -48,3 +48,8 @@
     (should (equal '(a b) (cdr x)))
     (should (eq 'y (car y)))
     (should (equal 'y (cdr y)))))
+
+(ert-deftest jeison:check-read-path-basic ()
+  (should (equal 42 (jeison--read-path
+                     (json-read-from-string "{\"a\": {\"b\": {\"c\": 42}}}")
+                     '(a b c)))))
