@@ -65,3 +65,18 @@
   (let ((parsed (jeison-read jeison:jeison-class
                              "{\"a\": {\"b\": 42}, \"c\": 36.6}")))
     (should (equal (oref parsed x) 42))))
+
+(ert-deftest jeison:check-read-nested ()
+  (jeison-defclass jeison:jeison-class-a nil
+                   ((i :initarg :i)
+                    (j :initarg :j)))
+  (jeison-defclass jeison:jeison-class-b nil
+                   ((x :initarg :x :path (a b))
+                    (y :initarg :y :type jeison:jeison-class-a :path c)))
+  (let* ((parsed (jeison-read
+                  jeison:jeison-class-b
+                  "{\"a\": {\"b\": 42}, \"c\": {\"i\": 1, \"j\": 2}}"))
+         (parsed-nested (oref parsed y)))
+    (should (equal (oref parsed x) 42))
+    (should (equal (oref parsed-nested i) 1))
+    (should (equal (oref parsed-nested j) 2))))
