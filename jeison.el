@@ -5,7 +5,7 @@
 ;; Authors: Valeriy Savchenko <sinmipt@gmail.com>
 ;; URL: http://github.com/SavchenkoValeriy/jeison
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "24"))
+;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: lisp json data-types
 
 ;; This file is NOT part of GNU Emacs.
@@ -50,9 +50,7 @@
 
 (defun jeison--set-paths (name slots)
   "TODO"
-  (cl-mapcar #'jeison--set-path
-             (eieio--class-slots (cl-find-class name))
-             slots))
+  (cl-mapcar #'jeison--set-path (jeison--class-slots name) slots))
 
 (defun jeison-class-p (class-or-class-name)
   "TODO"
@@ -62,7 +60,8 @@
 
 (defun jeison-object-p (object)
   "TODO"
-  (jeison-class-p (type-of object)))
+  (and (cl-typep object 'eieio-object)
+       (jeison-class-p (eieio-object-class object))))
 
 (defun jeison--find-class (class-or-class-name)
   "TODO"
@@ -72,8 +71,7 @@
 
 (defun jeison--get-slots (class-or-class-name)
   "TODO"
-  (let ((class (jeison--find-class class-or-class-name)))
-    (mapcar #'jeison--get-slot (eieio--class-slots class))))
+  (mapcar #'jeison--get-slot (jeison--class-slots class-or-class-name)))
 
 (defun jeison--get-slot (raw-slot)
   "TODO"
@@ -81,6 +79,9 @@
     (cons (cl--slot-descriptor-name raw-slot)
           (assoc-default :path props))))
 
+(defun jeison--class-slots (class-or-class-name)
+  "TODO"
+  (eieio--class-slots (jeison--find-class class-or-class-name)))
 
 (provide 'jeison)
 ;;; jeison.el ends here
