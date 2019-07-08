@@ -49,6 +49,9 @@
                  alist-or-json)))
     (jeison--read-internal type json path)))
 
+(define-error 'jeison-wrong-parsed-type
+  "Jeison encountered unexpected type" 'error)
+
 (defun jeison--read-internal (type json &optional path)
   "TODO"
   (let* ((json (jeison--read-path json path))
@@ -56,15 +59,17 @@
           (pcase type
             ((pred jeison-class-p) (jeison--read-class type json))
             (`(list-of ,element-type)
-             (cl-check-type
-              json sequence
-              (format "\"%S\" was specified to be a sequence, but got \"%S\""
-                      path json))
+             (or (cl-typep json 'sequence)
+                 (signal 'jeison-wrong-parsed-type
+                         (list 'sequence json)))
              (mapcar (lambda (element)
                        (jeison--read-internal element-type element)) json))
             (_ json))))
     ;; TODO: check that `RESULT' is of type `TYPE'
     ;; (cl-check-type result type) doesn't work as it uses type as symbol
+    (or (cl-typep result type)
+        (signal 'jeison-wrong-parsed-type
+                (list type result)))
     result))
 
 (defun jeison--read-class (class json)

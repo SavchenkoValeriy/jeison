@@ -96,3 +96,20 @@
                    (mapcar (lambda (element) (oref element x)) (oref parsed a))))
     (should (equal '("hello" "jeison" "enthusiasts")
                    (oref parsed b)))))
+
+(ert-deftest jeison:check-read-wrong-type ()
+  (jeison-defclass jeison:jeison-class nil ((x :initarg :x :type string)))
+  (condition-case nil
+      (progn
+        (jeison-read jeison:jeison-class "{\"x\": 1}")
+        (ert-fail "Unexpected success"))
+    (jeison-wrong-parsed-type nil)))
+
+(ert-deftest jeison:check-read-wrong-list ()
+  (jeison-defclass jeison:jeison-class nil
+                   ((x :initarg :x :type (list-of number))))
+  (condition-case nil
+      (progn
+        (jeison-read jeison:jeison-class "{\"x\": 1}")
+        (ert-fail "Unexpected success"))
+    (jeison-wrong-parsed-type nil)))
