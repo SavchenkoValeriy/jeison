@@ -36,8 +36,8 @@
 (defmacro jeison-defclass (name superclasses slots &rest options-and-doc)
   "Define NAME as a new class derived from SUPERCLASS with SLOTS.
 
-This macro is fully compatible with `defmacro' and accepts the same arguments.
-The only difference is additional `:path' tag for slots.
+This macro is fully compatible with `defclass' macro and accepts the same
+arguments.  The only difference is additional `:path' tag for slots.
 
 OPTIONS-AND-DOC is used as the class' options and base documentation.
 SUPERCLASSES is a list of superclasses to inherit from, with SLOTS
