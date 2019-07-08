@@ -63,7 +63,8 @@
              (mapcar (lambda (element)
                        (jeison--read-internal element-type element)) json))
             (_ json))))
-    (cl-check-type result (eval type))
+    ;; TODO: check that `RESULT' is of type `TYPE'
+    ;; (cl-check-type result type) doesn't work as it uses type as symbol
     result))
 
 (defun jeison--read-class (class json)
