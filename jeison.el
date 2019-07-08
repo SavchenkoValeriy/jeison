@@ -34,7 +34,63 @@
 (require 'json)
 
 (defmacro jeison-defclass (name superclasses slots &rest options-and-doc)
-  "TODO"
+  "Define NAME as a new class derived from SUPERCLASS with SLOTS.
+
+This macro is fully compatible with `defmacro' and accepts the same arguments.
+The only difference is additional `:path' tag for slots.
+
+OPTIONS-AND-DOC is used as the class' options and base documentation.
+SUPERCLASSES is a list of superclasses to inherit from, with SLOTS
+being the slots residing in that class definition.  Supported tags are:
+
+  :initform   - Initializing form.
+  :initarg    - Tag used during initialization.
+  :accessor   - Tag used to create a function to access this slot.
+  :allocation - Specify where the value is stored.
+                Defaults to `:instance', but could also be `:class'.
+  :writer     - A function symbol which will `write' an object's slot.
+  :reader     - A function symbol which will `read' an object.
+  :type       - The type of data allowed in this slot (see `typep').
+  :documentation
+              - A string documenting use of this slot.
+  :path       - A path in JSON that is used to find the value for this slot
+                during the `jeison-read' parsing process.
+
+The following are extensions on CLOS:
+  :custom     - When customizing an object, the custom :type.  Public only.
+  :label      - A text string label used for a slot when customizing.
+  :group      - Name of a customization group this slot belongs in.
+  :printer    - A function to call to print the value of a slot.
+                See `eieio-override-prin1' as an example.
+
+A class can also have optional options.  These options happen in place
+of documentation (including a :documentation tag), in addition to
+documentation, or not at all.  Supported options are:
+
+  :documentation - The doc-string used for this class.
+
+Options added to EIEIO:
+
+  :allow-nil-initform - Non-nil to skip typechecking of null initforms.
+  :custom-groups      - List of custom group names.  Organizes slots into
+                        reasonable groups for customizations.
+  :abstract           - Non-nil to prevent instances of this class.
+                        If a string, use as an error string if someone does
+                        try to make an instance.
+  :method-invocation-order
+                      - Control the method invocation order if there is
+                        multiple inheritance.  Valid values are:
+                         :breadth-first - The default.
+                         :depth-first
+
+Options in CLOS not supported in EIEIO:
+
+  :metaclass - Class to use in place of `standard-class'
+  :default-initargs - Initargs to use when initializing new objects of
+                      this class.
+
+Due to the way class options are set up, you can add any tags you wish,
+and reference them using the function `class-option'."
   (declare (doc-string 4))
   `(progn
      ;; create a usual EIEIO class and tag it as jeison class
@@ -44,6 +100,7 @@
 
 (defun jeison-read (type alist-or-json &optional path)
   "TODO"
+  ;; read JSON from string into an alist and proceed
   (let* ((json (if (stringp alist-or-json)
                    (json-read-from-string alist-or-json)
                  alist-or-json)))
@@ -93,67 +150,104 @@
     ;; path is not a list - assume that it's a one-level path
     (_ (assoc-default path json))))
 
+(defun jeison--set-paths (class-or-class-name slots)
+  "Save path information from SLOTS into CLASS-OR-CLASS-NAME.
+
+CLASS-OR-CLASS-NAME can be a symbol name of the class or class itself.
+SLOTS is a list of slot descriptions given by the user to
+`jeison-defclass' macro.
+
+We use this function to store additional information about slots
+inside of them."
+  (cl-mapcar #'jeison--set-path
+             (jeison--class-slots class-or-class-name) slots))
+
 (defun jeison--set-path (cl-slot slot-description)
-  "TODO"
+  "Save path information into the given SL-SLOT.
+
+CL-SLOT is an object representing `cl--slot-descriptor' class.
+SLOT-DESCRIPTION is a description of the slot given by the user to
+`jeison-defclass' macro.
+
+Jeison stores path information in the slot's props because props are
+just a simple `alist' and we can sneak additional information in there."
   (let* ((slot-options (cdr slot-description))
+         ;; path is either user-defined :path
          (path (or (plist-get slot-options :path)
+                   ;; or just a name of the slot
                    (cl--slot-descriptor-name cl-slot)))
+         ;; retrieve props from the slot
          (slot-props (cl--slot-descriptor-props cl-slot))
+         ;; add extracted :path to the props
          (slot-props (append slot-props `((:path . ,path)))))
+    ;; save new version of props back into the slot
     (setf (cl--slot-descriptor-props cl-slot) slot-props)))
 
-(defun jeison--set-paths (name slots)
-  "TODO"
-  (cl-mapcar #'jeison--set-path (jeison--class-slots name) slots))
-
 (defun jeison-class-p (class-or-class-name)
-  "TODO"
+  "Return t if CLASS-OR-CLASS-NAME is a jeison class.
+
+CLASS-OR-CLASS-NAME can be a symbol name of the class or class itself."
   (let ((class (jeison--find-class class-or-class-name)))
     (and (eieio--class-p class)
          (plist-get (eieio--class-options class) :jeison))))
 
 (defun jeison-object-p (object)
-  "TODO"
+  "Return t if OBJECT represents jeison class."
+  ;; check that it's EIEIO object first
   (and (cl-typep object 'eieio-object)
+       ;; and only then check the class itself
        (jeison-class-p (eieio-object-class object))))
-
-(defun jeison--find-class (class-or-class-name)
-  "TODO"
-  (if (symbolp class-or-class-name)
-      (cl-find-class class-or-class-name)
-    class-or-class-name))
 
 (defclass jeison--slot nil
   ((name :initarg :name
-         :documentation "Name of the slot")
+         :documentation "Name of the slot.")
    (initarg :initarg :initarg
-            :documentation "Constructor's argument of the slot")
+            :documentation "Constructor's argument of the slot.")
    (path :initarg :path
-         :documentation "JSON path to retrieve the slot")
+         :documentation "JSON path to retrieve the slot.")
    (type :initarg :type
-         :documentation "Lisp type of the slot"))
-  :documentation "TODO")
+         :documentation "Lisp type of the slot."))
+  :documentation
+  "A small utility class containing information about jeison class slots.")
 
 (defun jeison--get-slots (class-or-class-name)
-  "TODO"
+  "Construct a list of `jeison--slot' for all slots from CLASS-OR-CLASS-NAME.
+
+CLASS-OR-CLASS-NAME can be a symbol name of the class or class itself."
   (cl-mapcar #'jeison--get-slot (jeison--class-slots class-or-class-name)
              (jeison--initargs class-or-class-name)))
 
 (defun jeison--get-slot (raw-slot initarg)
-  "TODO"
+  "Construct `jeison--slot' object from RAW-SLOT and INITARG.
+
+RAW-SLOT is a `cl--slot-descriptor' object of a jeison class.
+INITARG is `:initarg' of RAW-SLOT, EIEIO keeps them separately."
   (let ((props (cl--slot-descriptor-props raw-slot)))
     (jeison--slot :name (cl--slot-descriptor-name raw-slot)
+                  ;; initarg is a cons (name . initarg)
                   :initarg (car initarg)
                   :type (cl--slot-descriptor-type raw-slot)
                   :path (assoc-default :path props))))
 
 (defun jeison--initargs (class-or-class-name)
-  "TODO"
+  "Return list of `:initarg's associated with the given CLASS-OR-CLASS-NAME.
+
+CLASS-OR-CLASS-NAME can be a symbol name of the class or class itself."
   (eieio--class-initarg-tuples (jeison--find-class class-or-class-name)))
 
 (defun jeison--class-slots (class-or-class-name)
-  "TODO"
+  "Return slot objects associated with the given CLASS-OR-CLASS-NAME.
+
+CLASS-OR-CLASS-NAME can be a symbol name of the class or class itself."
   (eieio--class-slots (jeison--find-class class-or-class-name)))
+
+(defun jeison--find-class (class-or-class-name)
+  "Return class object for the given CLASS-OR-CLASS-NAME.
+
+CLASS-OR-CLASS-NAME can be a symbol name of the class or class itself."
+  (if (symbolp class-or-class-name)
+      (cl-find-class class-or-class-name)
+    class-or-class-name))
 
 (provide 'jeison)
 ;;; jeison.el ends here
