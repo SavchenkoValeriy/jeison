@@ -46,11 +46,25 @@
   "TODO"
   (let* ((json (if (stringp alist-or-json)
                    (json-read-from-string alist-or-json)
-                 alist-or-json))
-         (json (jeison--read-path json path)))
-    (pcase type
-      ((pred jeison-class-p) (jeison--read-class type json))
-      (_ json))))
+                 alist-or-json)))
+    (jeison--read-internal type json path)))
+
+(defun jeison--read-internal (type json &optional path)
+  "TODO"
+  (let* ((json (jeison--read-path json path))
+         (result
+          (pcase type
+            ((pred jeison-class-p) (jeison--read-class type json))
+            (`(list-of ,element-type)
+             (cl-check-type
+              json sequence
+              (format "\"%S\" was specified to be a sequence, but got \"%S\""
+                      path json))
+             (mapcar (lambda (element)
+                       (jeison--read-internal element-type element)) json))
+            (_ json))))
+    (cl-check-type result (eval type))
+    result))
 
 (defun jeison--read-class (class json)
   "TODO"
@@ -60,7 +74,8 @@
 
 (defun jeison--read-slot (slot json)
   "TODO"
-  (list (oref slot initarg) (jeison-read (oref slot type) json (oref slot path))))
+  (list (oref slot initarg) (jeison--read-internal
+                             (oref slot type) json (oref slot path))))
 
 (defun jeison--read-path (json path)
   "TODO"

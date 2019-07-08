@@ -27,7 +27,7 @@
 (require 'ert)
 (require 'jeison)
 
-(ert-deftest jeison:predicates ()
+(ert-deftest jeison:check-predicates ()
   (jeison-defclass jeison:jeison-class nil nil)
   (defclass jeison:usual-class nil nil)
   (should (jeison-class-p jeison:jeison-class))
@@ -80,3 +80,19 @@
     (should (equal (oref parsed x) 42))
     (should (equal (oref parsed-nested i) 1))
     (should (equal (oref parsed-nested j) 2))))
+
+(ert-deftest jeison:check-read-lists ()
+  (jeison-defclass jeison:jeison-class-a nil ((x :initarg :x)))
+  (jeison-defclass jeison:jeison-class-b nil
+                   ((a :initarg :a :type (list-of jeison:jeison-class-a))
+                    (b :initarg :b :type (list-of string))))
+  (let* ((parsed (jeison-read
+                  jeison:jeison-class-b
+                  "{
+                  \"a\": [{\"x\": 1}, {\"x\": 15}, {\"x\": 30}],
+                  \"b\": [\"hello\", \"jeison\", \"enthusiasts\"]
+                  }")))
+    (should (equal '(1 15 30)
+                   (mapcar (lambda (element) (oref element x)) (oref parsed a))))
+    (should (equal '("hello" "jeison" "enthusiasts")
+                   (oref parsed b)))))
