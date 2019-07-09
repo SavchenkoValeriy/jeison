@@ -113,3 +113,29 @@
         (jeison-read jeison:jeison-class "{\"x\": 1}")
         (ert-fail "Unexpected success"))
     (jeison-wrong-parsed-type nil)))
+
+(ert-deftest jeison:check-jeisonify ()
+  (defclass jeison:usual-class nil ((x :initarg :x)
+                                    (y :initarg :y)))
+  (jeisonify jeison:usual-class)
+  (let ((parsed (jeison-read
+                 jeison:usual-class
+                 "{\"x\": 1, \"y\": 2}")))
+    (should (equal 1 (oref parsed x)))
+    (should (equal 2 (oref parsed y)))
+    (should (jeison-class-p jeison:usual-class))
+    (should (jeison-object-p parsed))))
+
+(ert-deftest jeison:check-jeisonify-wrong-type ()
+  (condition-case nil
+      (progn
+        (jeisonify 'number)
+        (ert-fail "Unexpected success"))
+    (wrong-type-argument nil))
+  (jeison-defclass jeison:jeison-class nil
+                   ((x :initarg :x) (y :initarg :y)))
+  (condition-case nil
+      (progn
+        (jeisonify jeison:jeison-class)
+        (ert-fail "Unexpected success"))
+    (error nil)))

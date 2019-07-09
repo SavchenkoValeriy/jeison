@@ -98,6 +98,27 @@ and reference them using the function `class-option'."
      ;; inject :path property into the newly created class
      (jeison--set-paths ',name ',slots)))
 
+(defun jeisonify (class-name)
+  "Make a usual EIEIO CLASS-NAME jeison compatible.
+
+CLASS-NAME is a symbol name of the class, it must be EIEIO class.
+
+We use this function to store additional information about slots
+inside of them (inside of slots props), if this behavior doesn't fit
+your needs, please consider declaring a separate class."
+  ;; passing jeison class would break custom `:path'es set in it
+  (or (not (jeison-class-p class-name))
+      (error "Given type is already a jeison class"))
+  ;; check that the given type is EIEIO class indeed
+  (cl-check-type (eieio--class-object class-name) eieio--class)
+  ;; tag it as jeison class
+  (plist-put (eieio--class-options
+              (jeison--find-class class-name))
+             :jeison t)
+  ;; and put :path property into its slots
+  (mapc (lambda (slot-descriptor) (jeison--set-path slot-descriptor nil))
+        (jeison--class-slots class-name)))
+
 (defun jeison-read (type alist-or-json &optional path)
   "Read TYPE from ALIST-OR-JSON by the given PATH.
 
