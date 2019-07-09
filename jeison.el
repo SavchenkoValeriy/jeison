@@ -114,34 +114,60 @@ and reference them using the function `class-option'."
   (let* ((json (jeison--read-path json path))
          (result
           (pcase type
+            ;; type is a jeison class: read JSON as a class
             ((pred jeison-class-p) (jeison--read-class type json))
+            ;; type is a homogeneous list of some sort
             (`(list-of ,element-type)
+             ;; first we should check that JSON object itself is
+             ;; some sort of sequence
              (or (cl-typep json 'sequence)
                  (signal 'jeison-wrong-parsed-type
                          (list 'sequence json)))
+             ;; then we should iterate of this JSON sequence
+             ;; and parse element-type (retrieved from the type)
+             ;; from each element
              (mapcar (lambda (element)
                        (jeison--read-internal element-type element)) json))
+            ;; not a special case of parsing - return whatever we found
             (_ json))))
-    ;; TODO: check that `RESULT' is of type `TYPE'
-    ;; (cl-check-type result type) doesn't work as it uses type as symbol
+    ;; check that the parsed value matches the expected type...
     (or (cl-typep result type)
         (signal 'jeison-wrong-parsed-type
                 (list type result)))
+    ;; ...and return it if it does
     result))
 
-(defun jeison--read-class (class json)
-  "TODO"
+(defun jeison--read-class (class-name json)
+  "Read jeison CLASS-NAME from the given JSON.
+
+CLASS-NAME is a symbol name of the class.
+JSON is an `alist' representing a JSON object where we want information
+to be parsed from."
+  ;; iterate over the class' slots and read data from JSON to fill them
   (let ((arguments (cl-mapcan (lambda (slot) (jeison--read-slot slot json))
-                              (jeison--get-slots class))))
-    (apply class arguments)))
+                              (jeison--get-slots class-name))))
+    ;; construct the class with parsed arguments
+    (apply class-name arguments)))
 
 (defun jeison--read-slot (slot json)
-  "TODO"
+  "Return a cons of arguments to initialize the given SLOT in a constructor.
+
+It returns a list of a form (:field field-value) to be later used as arguments
+in the target class' constructor:
+  (class :field1 field1-value :field2 field2-value ...).
+
+SLOT is a jeison descriptor of an slot, i.e. `jeison--slot'.
+JSON is an `alist' representing a JSON object where we want information
+to be parsed from."
   (list (oref slot initarg) (jeison--read-internal
                              (oref slot type) json (oref slot path))))
 
 (defun jeison--read-path (json path)
-  "TODO"
+  "Return nested JSON object found by the given list of keys PATH.
+
+JSON is an `alist' representing JSON object.
+PATH is a `list' of keys we should consequently find in JSON and
+proceed with a nested JSON further on."
   (pcase path
     ;; unwrap one level of the path
     (`(,head . ,tail) (jeison--read-path (assoc-default head json) tail))
