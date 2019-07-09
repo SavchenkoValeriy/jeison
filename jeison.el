@@ -99,7 +99,14 @@ and reference them using the function `class-option'."
      (jeison--set-paths ',name ',slots)))
 
 (defun jeison-read (type alist-or-json &optional path)
-  "TODO"
+  "Read TYPE from ALIST-OR-JSON by the given PATH.
+
+TYPE is a CL-defined type (should work with `cl-typep'), that means
+also that t is a valid type.
+ALIST-OR-JSON is either a `string' with raw JSON or an `alist' representing
+a JSON object where we want information to be parsed from.
+PATH is a `list' of keys we should consequently find in JSON and
+proceed with a nested JSON further on."
   ;; read JSON from string into an alist and proceed
   (let* ((json (if (stringp alist-or-json)
                    (json-read-from-string alist-or-json)
@@ -110,7 +117,14 @@ and reference them using the function `class-option'."
   "Jeison encountered unexpected type" 'error)
 
 (defun jeison--read-internal (type json &optional path)
-  "TODO"
+  "Read TYPE from JSON by the given PATH.
+
+TYPE is a CL-defined type (should work with `cl-typep'), that means
+also that t is a valid type.
+JSON is an `alist' representing a JSON object where we want information
+to be parsed from.
+PATH is a `list' of keys we should consequently find in JSON and
+proceed with a nested JSON further on."
   (let* ((json (jeison--read-path json path))
          (result
           (pcase type
