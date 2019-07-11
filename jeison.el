@@ -205,11 +205,30 @@ PATH is a `list' of keys we should consequently find in JSON and
 proceed with a nested JSON further on."
   (pcase path
     ;; unwrap one level of the path
-    (`(,head . ,tail) (jeison--read-path (assoc-default head json) tail))
+    (`(,head . ,tail) (jeison--read-path (jeison--read-element head json) tail))
     ;; the path is empty - nothing left to do here
     ('nil json)
     ;; path is not a list - assume that it's a one-level path
-    (_ (assoc-default path json))))
+    (_ (jeison--read-element path json))))
+
+(defun jeison--read-element (element json)
+  "Read ELEMENT from the given JSON.
+
+ELEMENT is either a name of the field (`symbol' or `string'), or an index
+of the required element of the sequence.
+JSON is an `alist' representing JSON object."
+  (cl-typecase element
+    ;; symbol -> it's a simple key
+    (symbol (assoc-default element json))
+    ;; string -> it's the same semantics as with the symbol case,
+    ;; but keys in alist are symbols and trying to get values by plain
+    ;; string won't do, so we convert string to symbol
+    (string (jeison--read-element (intern element) json))
+    ;; integer -> it looks like json should be a sequence
+    ;; and we want just a single element of it
+    ;; additionally, if it's negative treat it as an index from the end
+    (integer (elt json (if (< element 0)
+                           (+ (length json) element) element)))))
 
 (defun jeison--set-paths (class-or-class-name slots)
   "Save path information from SLOTS into CLASS-OR-CLASS-NAME.

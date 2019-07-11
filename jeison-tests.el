@@ -59,6 +59,20 @@
                      (json-read-from-string "{\"a\": {\"b\": {\"c\": 42}}}")
                      '(a b c)))))
 
+(ert-deftest jeison:check-read-path-index ()
+  (let ((json "{\"a\": [{\"b\": 42}, {\"b\": 11}, {\"b\": 100}]}"))
+    (should (equal 42 (jeison--read-path
+                       (json-read-from-string json)
+                       '(a 0 b))))
+    (should (equal 100 (jeison--read-path
+                        (json-read-from-string json)
+                        '(a -1 b))))))
+
+(ert-deftest jeison:check-read-path-string ()
+  (should (equal 42 (jeison--read-path
+                     (json-read-from-string "{\"a\": {\"b\": {\"c\": 42}}}")
+                     (list "a" "b" "c")))))
+
 (ert-deftest jeison:check-read-basic ()
   (jeison-defclass jeison:jeison-class nil ((x :initarg :x :path (a b))
                                             (y :initarg :y :path c)))
