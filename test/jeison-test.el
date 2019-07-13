@@ -161,3 +161,5 @@
                              "{\"a\": {\"b\": 42}, \"c\": 36.6}")))
     (should (equal (oref parsed x) 42))
     (should (equal (oref parsed y) 36.6))))
+
+;;; jeison-test.el ends here
