@@ -5,7 +5,7 @@
 ;; Authors: Valeriy Savchenko <sinmipt@gmail.com>
 ;; URL: http://github.com/SavchenkoValeriy/jeison
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "25.1"))
+;; Package-Requires: ((emacs "25.1") (dash "2.16.0"))
 ;; Keywords: lisp json data-types
 
 ;; This file is NOT part of GNU Emacs.
@@ -30,6 +30,7 @@
 
 ;;; Code:
 (require 'cl-lib)
+(require 'dash)
 (require 'eieio)
 (require 'json)
 
@@ -179,10 +180,27 @@ CLASS-NAME is a symbol name of the class.
 JSON is an `alist' representing a JSON object where we want information
 to be parsed from."
   ;; iterate over the class' slots and read data from JSON to fill them
-  (let ((arguments (cl-mapcan (lambda (slot) (jeison--read-slot slot json))
-                              (jeison--get-slots class-name))))
-    ;; construct the class with parsed arguments
-    (apply class-name arguments)))
+  (-let* ((slots (jeison--get-slots class-name))
+          ((initarg-slots rest-slots) (--separate (oref it initarg) slots))
+          (constructor-arguments
+           (-mapcat (lambda (slot) (jeison--read-slot slot json)) initarg-slots))
+          (setter-arguments
+           (mapcar (lambda (slot) (jeison--read-slot slot json)) rest-slots))
+          ;; construct the class with parsed arguments
+          (result (apply class-name constructor-arguments)))
+    ;; set values to slots without `:initarg's
+    (jeison--set-slot-values result setter-arguments)
+    result))
+
+(defun jeison--set-slot-values (object list-of-arguments)
+  "Set slots of the OBJECT using the given LIST-OF-ARGUMENTS.
+
+LIST-OF-ARGUMENTS is a list of lists ((name-1 value-1) .. (name-n value-n)),
+where name-i is a name of OBJECT's slot and value-i is its new value."
+  (mapc (lambda (arguments)
+          (-let (((name value) arguments))
+            (eieio-oset object name value)))
+        list-of-arguments))
 
 (defun jeison--read-slot (slot json)
   "Return a cons of arguments to initialize the given SLOT in a constructor.
@@ -194,8 +212,10 @@ in the target class' constructor:
 SLOT is a jeison descriptor of an slot, i.e. `jeison--slot'.
 JSON is an `alist' representing a JSON object where we want information
 to be parsed from."
-  (list (oref slot initarg) (jeison--read-internal
-                             (oref slot type) json (oref slot path))))
+  (list (or (oref slot initarg)
+            (oref slot name))
+        (jeison--read-internal
+         (oref slot type) json (oref slot path))))
 
 (defun jeison--read-path (json path)
   "Return nested JSON object found by the given list of keys PATH.
@@ -282,6 +302,7 @@ CLASS-OR-CLASS-NAME can be a symbol name of the class or class itself."
   ((name :initarg :name
          :documentation "Name of the slot.")
    (initarg :initarg :initarg
+            :initform nil
             :documentation "Constructor's argument of the slot.")
    (path :initarg :path
          :documentation "JSON path to retrieve the slot.")
@@ -294,18 +315,23 @@ CLASS-OR-CLASS-NAME can be a symbol name of the class or class itself."
   "Construct a list of `jeison--slot' for all slots from CLASS-OR-CLASS-NAME.
 
 CLASS-OR-CLASS-NAME can be a symbol name of the class or class itself."
-  (cl-mapcar #'jeison--get-slot (jeison--class-slots class-or-class-name)
-             (jeison--initargs class-or-class-name)))
+  (let* ((class (jeison--find-class class-or-class-name))
+         ;; compose a list of `jeison--slot' objects
+         (class-slots (mapcar #'jeison--get-slot (jeison--class-slots class)))
+         ;; retrieve a list of initargs from EIEIO
+         (initargs (jeison--initargs class)))
+    ;; match slots and initargs
+    (jeison--set-initargs class-slots initargs)
+    ;; return the list of slots
+    class-slots))
 
-(defun jeison--get-slot (raw-slot initarg)
+(defun jeison--get-slot (raw-slot)
   "Construct `jeison--slot' object from RAW-SLOT and INITARG.
 
 RAW-SLOT is a `cl--slot-descriptor' object of a jeison class.
 INITARG is `:initarg' of RAW-SLOT, EIEIO keeps them separately."
   (let ((props (cl--slot-descriptor-props raw-slot)))
     (jeison--slot :name (cl--slot-descriptor-name raw-slot)
-                  ;; initarg is a cons (name . initarg)
-                  :initarg (car initarg)
                   :type (cl--slot-descriptor-type raw-slot)
                   :path (assoc-default :path props))))
 
@@ -314,6 +340,30 @@ INITARG is `:initarg' of RAW-SLOT, EIEIO keeps them separately."
 
 CLASS-OR-CLASS-NAME can be a symbol name of the class or class itself."
   (eieio--class-initarg-tuples (jeison--find-class class-or-class-name)))
+
+(defun jeison--set-initargs (class-slots initargs)
+  "Set initarg field for the given CLASS-SLOTS using INITARGS.
+
+CLASS-SLOTS is a list of `jeison--slot' objects.
+INITARGS is a list of cons (initarg . field-name) from EIEIO.
+
+As INITARGS has cons only for the fields that do have initargs in the first
+place, common zip of two lists won't work.  However, all the elements from
+INITARGS are guaranteed to be in CLASS-SLOTS.  INITARGS and CLASS-SLOTS are
+also guaranteed to have the same order."
+  ;; if at least of these lists is empty, we have not much to do here
+  (when (and class-slots initargs)
+    (-let (((slot . rest-slots) class-slots)
+           (((initarg . name) . rest-initargs) initargs))
+      ;; check that current initarg is defined for the current slot
+      (when (equal (oref slot name) name)
+        ;; set initarg field for the slot
+        (oset slot initarg initarg)
+        ;; pop the top initarg from the list
+        ;; as we matched it already
+        (setq initargs rest-initargs))
+      ;; match the rest of slots
+      (jeison--set-initargs rest-slots initargs))))
 
 (defun jeison--class-slots (class-or-class-name)
   "Return slot objects associated with the given CLASS-OR-CLASS-NAME.

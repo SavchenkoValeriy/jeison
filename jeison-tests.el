@@ -153,3 +153,11 @@
         (jeisonify jeison:jeison-class)
         (ert-fail "Unexpected success"))
     (error nil)))
+
+(ert-deftest jeison:check-read-no-initarg ()
+  (jeison-defclass jeison:jeison-class nil ((x :path (a b))
+                                            (y :initarg :y :path c)))
+  (let ((parsed (jeison-read jeison:jeison-class
+                             "{\"a\": {\"b\": 42}, \"c\": 36.6}")))
+    (should (equal (oref parsed x) 42))
+    (should (equal (oref parsed y) 36.6))))
