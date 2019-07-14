@@ -26,7 +26,8 @@
 
 ;;; Commentary:
 
-;; TODO
+;; Jeison is a library for transforming JSON objects (or `alist's) into
+;; EIEIO objects.
 
 ;;; Code:
 (require 'cl-lib)
