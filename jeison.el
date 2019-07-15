@@ -1,4 +1,4 @@
-;;; jeison.el --- EIEIO JSON parser -*- lexical-binding: t; -*-
+;;; jeison.el --- A library for declarative JSON parsing -*- lexical-binding: t; -*-
 
 ;; Copyright (c) 2019 Valeriy Savchenko (GNU/GPL Licence)
 
