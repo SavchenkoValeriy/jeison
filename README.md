@@ -31,7 +31,7 @@ The next step would be transforming actual JSON object into EIEIO object. This i
 // json-person
 {
   "personal": {
-    "address": { ... },
+    "address": { },
     "name": {
       "first": "John",
       "last": "Johnson"
@@ -41,7 +41,7 @@ The next step would be transforming actual JSON object into EIEIO object. This i
     "company": "Good Inc.",
     "title": "CEO"
   },
-  "skills": [ ... ]
+  "skills": [ ]
 }
 ```
 
@@ -90,7 +90,63 @@ In many cases, classes that we use in code significantly resemble the structure 
 
 ### Type checks
 
+*Jeison* checks that type that user wants to read from JSON object matches the one that was actually found:
+
+``` emacs-lisp
+(jeison-read 'string '((x . 1)) 'x) ;; => (jeison-wrong-parsed-type string 1)
+```
+
 ### Nested objects
+
+EIEIO allows annotating class slots with *types*. Besides checking the type of the found object, *Jeison* uses this information for constructing *nested objects*.
+
+Let's consider the following example:
+
+``` emacs-lisp
+(jeison-defclass jeison-person nil
+                 ((name :initarg :name :path (personal name last))
+                  (job :initarg :job :type jeison-job)))
+
+(jeison-defclass jeison-job nil
+                 ((company :initarg company)
+                  (position :initarg position :path title)
+                  (location :initarg location :path (location city))))
+```
+
+In this example, `jeison-person` has a slot that has a type of another *jeison* class: `jeison-job`. As the result of this hierarchy, for the next JSON object:
+
+``` json
+// json-person
+{
+  "personal": {
+    "address": { },
+    "name": {
+      "first": "John",
+      "last": "Johnson"
+    }
+  },
+  "job": {
+    "company": "Good Inc.",
+    "title": "CEO",
+    "location": {
+      "country": "Norway",
+      "city": "Oslo"
+    }
+  },
+  "skills": [ ]
+}
+```
+
+We have these results:
+
+``` emacs-lisp
+(setq person (jeison-read jeison-person json-person))
+(oref person name) ;; => "Johnson"
+(setq persons-job (oref person job))
+(oref persons-job company) ;; => "Good Inc."
+(oref persons-job position) ;; => "CEO"
+(oref persons-job location) ;; => "Oslo"
+```
 
 ### Lists
 
