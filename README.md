@@ -108,9 +108,9 @@ Let's consider the following example:
                   (job :initarg :job :type jeison-job)))
 
 (jeison-defclass jeison-job nil
-                 ((company :initarg company)
-                  (position :initarg position :path title)
-                  (location :initarg location :path (location city))))
+                 ((company :initarg :company)
+                  (position :initarg :position :path title)
+                  (location :initarg :location :path (location city))))
 ```
 
 In this example, `jeison-person` has a slot that has a type of another *jeison* class: `jeison-job`. As the result of this hierarchy, for the next JSON object:
@@ -150,8 +150,168 @@ We have these results:
 
 ### Lists
 
+Another JSON's basic data type is *array*. *Jeison* can deal with arrays in two ways:
+
+* **ignore**: *jeison* can behave like it is a normal value and do nothing about it
+
+``` emacs-lisp
+(jeison-read
+ t "{\"numbers\": [1, 2, 10, 40, 100]}" 'numbers) ;; => [1 2 10 40 100]
+```
+
+It is a vector by the given path and *jeison* can simply return it.
+
+However, sometimes we might want to have a list or check that all elements have certain type.
+
+* **type-specific processing**: *jeison* can process JSON arrays based on the expected type
+
+``` emacs-lisp
+(jeison-read '(list-of integer)
+             "{\"numbers\": [1, 2, 10, 40, 100]}"
+             'numbers) ;; => (1 2 10 40 100)
+```
+
+EIEIO defines a very handy type `list-of` that we can use for processing array elements and checking that they match the corresponding type.
+
+This mechanism also allows *jeison* to parse **lists of nested objects**. Let's continue our "John Johnson" example and add skill processing:
+
+``` emacs-lisp
+(jeison-defclass jeison-person nil
+                 ((name :initarg :name :path (personal name last))
+                  (job :initarg :job :type jeison-job)
+                  (skills :initarg :skills :type (list-of jeison-skill))))
+
+(jeison-defclass jeison-job nil
+                 ((company :initarg :company)
+                  (position :initarg :position :path title)
+                  (location :initarg :location :path (location city))))
+                  
+(jeison-defclass jeison-skill nil
+                 ((name :initarg :name :type string)
+                  (level :initarg :level :type integer)))
+```
+
+For the following JSON object:
+
+``` json
+// json-person
+{
+  "personal": {
+    "address": { },
+    "name": {
+      "first": "John",
+      "last": "Johnson"
+    }
+  },
+  "job": {
+    "company": "Good Inc.",
+    "title": "CEO",
+    "location": {
+      "country": "Norway",
+      "city": "Oslo"
+    }
+  },
+  "skills": [
+    {
+      "name": "Programming",
+      "level": 9
+    },
+    {
+      "name": "Design",
+      "level": 4
+    },
+    {
+      "name": "Communication",
+      "level": 1
+    }
+  ]
+}
+```
+
+*jeison* produces these results:
+
+``` emacs-lisp
+(setq person (jeison-read jeison-person json-person))
+(oref person name) ;; => "Johnson"
+(mapcar
+ (lambda (skill)
+   (format "%s: %i" (oref skill name) (oref skill level)))
+ (oref person skills)) ;; => ("Programming: 9" "Design: 4" "Communication: 1")
+```
+
 ### Indexed elements
+
+Sometimes, though, it is not required to process the whole list. Sometimes we want just one element, especially in case of heterogeneous arrays. For this use case, *jeison* supports indices in its `:path` properties.
+
+Here is an example:
+
+``` json
+// json-company
+{
+  "company": {
+    "name": "Good Inc.",
+    "CEOs": [
+      {
+        "name": {
+          "first": "Gunnar",
+          "last": "Olafson"
+        },
+        "founder": true
+      },
+      {
+        "name": "TJ-B",
+        "cool": true
+      },
+      {
+        "name": {
+          "first": "John",
+          "last": "Johnson"
+        }
+      }
+    ]
+  }
+}
+```
+
+``` emacs-lisp
+(jeison-read 'boolean json-company '(company CEOs 0 founder)) ;; => t
+```
+
+Unlike arguments to `elt` function, indices can be *negative*. Negative indices have the same semantics as in **Python** language (enumeration from the end):
+
+``` emacs-lisp
+(jeison-read 'string json-company '(company CEOs -1 name last)) ;; => "Johnson"
+(jeison-read 'boolean json-company '(company CEOs -2 cool)) ;; => t
+```
 
 ### Turning regular classes into jeison classes
 
+Additionally, *jeison* has a feature of transforming existing classes declared with `defclass` macro into *jeison* classes:
+
+``` emacs-lisp
+(defclass usual-class nil ((x) (y)))
+(jeisonify usual-class)
+
+(setq parsed (jeison-read usual-class "{\"x\": 10, \"y\": 20}"))
+(oref parsed x) ;; => 10
+(oref parsed y) ;; => 20
+```
+
+**NOTE 1** even if `defclass` included `:path` properties, *jeison* will still use default paths.
+
+**NOTE 2** *jeison* hacks into the structure of EIEIO classes and their slots. If the modified class relies on the purity of slot properties or class options, don't use `jeisonify` functionality and create a new class instead.
+
+## Development
+
+*Jeison* uses [cask](https://github.com/cask/cask). After the installation of **cask**, install all dependencies and run tests:
+
+```
+$ cask install
+$ cask exec ert-runner
+```
+
 ## Contribute
+
+All contributions are most welcome!
+
+It might include any help: bug reports, questions on how to use it, feature suggestions, and documentation updates.
