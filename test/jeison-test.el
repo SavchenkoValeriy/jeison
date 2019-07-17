@@ -40,8 +40,8 @@
 
 (ert-deftest jeison:check-paths ()
   (jeison-defclass jeison:jeison-class nil
-                   ((x :initarg :x :path (a b))
-                    (y :initarg :y :type list)))
+    ((x :initarg :x :path (a b))
+     (y :initarg :y :type list)))
   (let* ((slots (jeison--get-slots jeison:jeison-class))
          (x (car slots))
          (y (cadr slots)))
@@ -82,11 +82,11 @@
 
 (ert-deftest jeison:check-read-nested ()
   (jeison-defclass jeison:jeison-class-a nil
-                   ((i :initarg :i)
-                    (j :initarg :j)))
+    ((i :initarg :i)
+     (j :initarg :j)))
   (jeison-defclass jeison:jeison-class-b nil
-                   ((x :initarg :x :path (a b))
-                    (y :initarg :y :type jeison:jeison-class-a :path c)))
+    ((x :initarg :x :path (a b))
+     (y :initarg :y :type jeison:jeison-class-a :path c)))
   (let* ((parsed (jeison-read
                   jeison:jeison-class-b
                   "{\"a\": {\"b\": 42}, \"c\": {\"i\": 1, \"j\": 2}}"))
@@ -98,8 +98,8 @@
 (ert-deftest jeison:check-read-lists ()
   (jeison-defclass jeison:jeison-class-a nil ((x :initarg :x)))
   (jeison-defclass jeison:jeison-class-b nil
-                   ((a :initarg :a :type (list-of jeison:jeison-class-a))
-                    (b :initarg :b :type (list-of string))))
+    ((a :initarg :a :type (list-of jeison:jeison-class-a))
+     (b :initarg :b :type (list-of string))))
   (let* ((parsed (jeison-read
                   jeison:jeison-class-b
                   "{
@@ -121,7 +121,7 @@
 
 (ert-deftest jeison:check-read-wrong-list ()
   (jeison-defclass jeison:jeison-class nil
-                   ((x :initarg :x :type (list-of number))))
+    ((x :initarg :x :type (list-of number))))
   (condition-case nil
       (progn
         (jeison-read jeison:jeison-class "{\"x\": 1}")
@@ -147,7 +147,7 @@
         (ert-fail "Unexpected success"))
     (wrong-type-argument nil))
   (jeison-defclass jeison:jeison-class nil
-                   ((x :initarg :x) (y :initarg :y)))
+    ((x :initarg :x) (y :initarg :y)))
   (condition-case nil
       (progn
         (jeisonify jeison:jeison-class)

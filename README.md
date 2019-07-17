@@ -14,8 +14,8 @@ In order to use *jeison* one must first define a class using `jeison-defclass`. 
 
 ``` emacs-lisp
 (jeison-defclass my-first-jeison-class nil
-                 ((name :initarg :name :path (personal name last))
-                  (job :initarg :job :path (job title))))
+  ((name :initarg :name :path (personal name last))
+   (job :initarg :job :path (job title))))
 ```
 
 Defining class like this we tell *jeison* where it should fetch values for `name` and `job` slots. In *JavaScript* syntax, it would look similar to the following code:
@@ -67,7 +67,7 @@ In many cases, classes that we use in code significantly resemble the structure 
 
 ``` emacs-lisp
 (jeison-defclass default-path-class nil
-                 ((first) (last) (full)))
+  ((first) (last) (full)))
 ```
 
 ``` json
@@ -104,13 +104,13 @@ Let's consider the following example:
 
 ``` emacs-lisp
 (jeison-defclass jeison-person nil
-                 ((name :initarg :name :path (personal name last))
-                  (job :initarg :job :type jeison-job)))
+  ((name :initarg :name :path (personal name last))
+   (job :initarg :job :type jeison-job)))
 
 (jeison-defclass jeison-job nil
-                 ((company :initarg :company)
-                  (position :initarg :position :path title)
-                  (location :initarg :location :path (location city))))
+  ((company :initarg :company)
+   (position :initarg :position :path title)
+   (location :initarg :location :path (location city))))
 ```
 
 In this example, `jeison-person` has a slot that has a type of another *jeison* class: `jeison-job`. As the result of this hierarchy, for the next JSON object:
@@ -177,18 +177,18 @@ This mechanism also allows *jeison* to parse **lists of nested objects**. Let's 
 
 ``` emacs-lisp
 (jeison-defclass jeison-person nil
-                 ((name :initarg :name :path (personal name last))
-                  (job :initarg :job :type jeison-job)
-                  (skills :initarg :skills :type (list-of jeison-skill))))
+  ((name :initarg :name :path (personal name last))
+   (job :initarg :job :type jeison-job)
+   (skills :initarg :skills :type (list-of jeison-skill))))
 
 (jeison-defclass jeison-job nil
-                 ((company :initarg :company)
-                  (position :initarg :position :path title)
-                  (location :initarg :location :path (location city))))
-                  
+  ((company :initarg :company)
+   (position :initarg :position :path title)
+   (location :initarg :location :path (location city))))
+
 (jeison-defclass jeison-skill nil
-                 ((name :initarg :name :type string)
-                  (level :initarg :level :type integer)))
+  ((name :initarg :name :type string)
+   (level :initarg :level :type integer)))
 ```
 
 For the following JSON object:
