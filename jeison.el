@@ -174,6 +174,19 @@ proceed with a nested JSON further on."
     ;; ...and return it if it does
     result))
 
+(defclass jeison--slot nil
+  ((name :initarg :name
+         :documentation "Name of the slot.")
+   (initarg :initarg :initarg
+            :initform nil
+            :documentation "Constructor's argument of the slot.")
+   (path :initarg :path
+         :documentation "JSON path to retrieve the slot.")
+   (type :initarg :type
+         :documentation "Lisp type of the slot."))
+  :documentation
+  "A small utility class containing information about jeison class slots.")
+
 (defun jeison--read-class (class-name json)
   "Read jeison CLASS-NAME from the given JSON.
 
@@ -298,19 +311,6 @@ CLASS-OR-CLASS-NAME can be a symbol name of the class or class itself."
   (and (cl-typep object 'eieio-object)
        ;; and only then check the class itself
        (jeison-class-p (eieio-object-class object))))
-
-(defclass jeison--slot nil
-  ((name :initarg :name
-         :documentation "Name of the slot.")
-   (initarg :initarg :initarg
-            :initform nil
-            :documentation "Constructor's argument of the slot.")
-   (path :initarg :path
-         :documentation "JSON path to retrieve the slot.")
-   (type :initarg :type
-         :documentation "Lisp type of the slot."))
-  :documentation
-  "A small utility class containing information about jeison class slots.")
 
 (defun jeison--get-slots (class-or-class-name)
   "Construct a list of `jeison--slot' for all slots from CLASS-OR-CLASS-NAME.
