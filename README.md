@@ -319,6 +319,92 @@ Additionally, *jeison* has a feature of transforming existing classes declared w
 
 **NOTE 2** *jeison* hacks into the structure of EIEIO classes and their slots. If the modified class relies on the purity of slot properties or class options, don't use `jeisonify` functionality and create a new class instead.
 
+### Functional elements of the path
+
+Often the data in JSON obect is not exactly what we need, sometimes we need to change it before making it usable by our application. In this situation, simply reading it into a class' slot won't be enough. For this (and some other) use cases, *jeison* provides a feature of *functional elements*.
+
+*Functional elements* might have a bit of an obscure syntax, so it might be better to see how it works within real examples.
+
+Let's say we have the following JSON object:
+
+``` json
+// json-movie
+{
+  "movie": {
+    "title": "The Shawshank Redemption",
+    "rating": "10.0"
+  }
+}
+```
+
+*Jeison* class:
+
+``` emacs-lisp
+(jeison-defclass jeison-movie nil
+  ((title :initarg :title :type string)
+   (rating :initarg :rating :type string :path (info rating))))
+```
+
+would do, but *rating* is a string, which is not a very good type if we want to compare different movies. In order to make this class more user-friendly, *functional element* can be used as follows:
+
+``` emacs-lisp
+(jeison-defclass jeison-movie nil
+  ((title :initarg :title :type string)
+   (rating :initarg :rating :type number
+           :path (info (string-to-number rating)))))
+```
+
+Parsing this new version of `jeison-movie` class from JSON will produce the following results:
+
+``` emacs-lisp
+(setq movie (jeison-read jeison-movie json-movie 'movie))
+(oref movie title) ;; => "The Shawshank Redemption"
+(oref movie rating) ;; => 10.0
+(> (oref movie rating) 9.8) ;; => t
+```
+
+*Functional element* `(string-to-number rating)` tells *jeison* that it should fetch whatever data is located by the path `rating`, call `string-to-number` function with this data as an argument and return that value.
+
+In the most generic case path including a *functional element* might look like this:
+
+``` emacs-lisp
+(a (f b1 b2 b3) c)
+```
+
+Describing what is going on with this path is easier with a similar JavaScript code:
+
+``` javascript
+// obj is the target JSON object
+f(obj['a']['b1'], obj['a']['b2'], obj['a']['b3'])['c']
+```
+
+As you can see from this example, *functional elements* can have more than one argument. Let's consider the following modification of one of our previous examples:
+
+``` json
+// json-name
+{
+  "name": {
+    "first": "John",
+    "last": "Johnson",
+  }
+}
+```
+
+``` emacs-lisp
+(defun get-full-name (first last)
+  (format "%s %s" first last))
+
+(jeison-read 'string json-name
+             '(name (get-full-name first last))) ;; => "John Johnson"
+```
+
+The same solution could've been implemented a bit differently:
+``` emacs-lisp
+(jeison-read 'string json-name
+             '((get-full-name (name first) (name last)))) ;; => "John Johnson"
+```
+
+
 ## Development
 
 *Jeison* uses [cask](https://github.com/cask/cask). After the installation of **cask**, install all dependencies and run tests:

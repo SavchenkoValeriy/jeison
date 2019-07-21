@@ -262,7 +262,24 @@ JSON is an `alist' representing JSON object."
     ;; and we want just a single element of it
     ;; additionally, if it's negative treat it as an index from the end
     (integer (elt json (if (< element 0)
-                           (+ (length json) element) element)))))
+                           (+ (length json) element) element)))
+    ;; list -> it is a function call with path elements as its arguments
+    (list (jeison--apply-function element json))))
+
+(defun jeison--apply-function (function-and-args json)
+  "Parse FUNCTION-AND-ARGS and apply it to JSON.
+
+FUNCTION-AND-ARGS is a list of the following structure:
+  (FUNCTION . (ARGUMENT-PATHS))
+FUNCTION can be a function symbol or a lambda expression.
+ARGUMENT-PATHS is a list of paths (that can also include functions)
+telling jeison where it can find arguments for the FUNCTION."
+  (-let* (((function-element . argument-paths) function-and-args)
+          ;; find arguments for the function by the specified paths...
+          (arguments (mapcar (lambda (path) (jeison--read-path json path))
+                             argument-paths)))
+    ;; ...and return whatever is the result of this function
+    (apply function-element arguments)))
 
 (defun jeison--set-paths (class-or-class-name slots)
   "Save path information from SLOTS into CLASS-OR-CLASS-NAME.

@@ -162,4 +162,57 @@
     (should (equal (oref parsed x) 42))
     (should (equal (oref parsed y) 36.6))))
 
+(ert-deftest jeison:check-read-function-simple ()
+  (jeison-defclass jeison:jeison-class nil
+    ((x :initarg :x :type number :path ((string-to-number (a b c))))))
+  (should (equal
+           42
+           (oref (jeison-read test "{\"a\": {\"b\": {\"c\": \"42\"}}}") x))))
+
+(ert-deftest jeison:check-read-function-two-arguments ()
+  (jeison-defclass jeison:jeison-class nil
+    ((full-name :path (name ((lambda (first-name last-name)
+                               (format "%s %s" first-name last-name))
+                             first last)))))
+  (should (equal
+           "John Johnson"
+           (oref
+            (jeison-read test-name "{
+                                      \"name\": {
+                                        \"first\": \"John\",
+                                        \"last\": \"Johnson\"
+                                      }
+                                    }") full-name))))
+
+(defun jeison:filter-candidates (candidates)
+  (seq-find (lambda (x) (jeison-read 'boolean x 'awesome)) candidates))
+
+(ert-deftest jeison:check-read-function-dynamic-choice ()
+  (let ((json-false nil))
+    (should (equal
+             42
+             (jeison-read 'integer "{
+                                    \"a\": {
+                                       \"b\": [
+                                        {
+                                          \"number\": 1,
+                                          \"awesome\": false
+                                        },
+                                        {
+                                          \"number\": 10,
+                                          \"awesome\": false
+                                        },
+                                        {
+                                          \"number\": 42,
+                                          \"awesome\": true
+                                        },
+                                        {
+                                          \"number\": 59,
+                                          \"awesome\": false
+                                        }
+                                      ]
+                                    }
+                                  }"
+                          '(a (jeison:filter-candidates b) number))))))
+
 ;;; jeison-test.el ends here
