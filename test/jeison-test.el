@@ -167,7 +167,9 @@
     ((x :initarg :x :type number :path ((string-to-number (a b c))))))
   (should (equal
            42
-           (oref (jeison-read test "{\"a\": {\"b\": {\"c\": \"42\"}}}") x))))
+           (oref (jeison-read jeison:jeison-class
+                              "{\"a\": {\"b\": {\"c\": \"42\"}}}")
+                 x))))
 
 (ert-deftest jeison:check-read-function-two-arguments ()
   (jeison-defclass jeison:jeison-class nil
@@ -177,12 +179,13 @@
   (should (equal
            "John Johnson"
            (oref
-            (jeison-read test-name "{
-                                      \"name\": {
-                                        \"first\": \"John\",
-                                        \"last\": \"Johnson\"
-                                      }
-                                    }") full-name))))
+            (jeison-read jeison:jeison-class
+                         "{
+                           \"name\": {
+                             \"first\": \"John\",
+                             \"last\": \"Johnson\"
+                           }
+                         }") full-name))))
 
 (defun jeison:filter-candidates (candidates)
   (seq-find (lambda (x) (jeison-read 'boolean x 'awesome)) candidates))
