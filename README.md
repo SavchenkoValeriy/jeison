@@ -1,10 +1,28 @@
-# jeison [![Build Status](https://travis-ci.org/SavchenkoValeriy/jeison.svg?branch=master)](https://travis-ci.org/SavchenkoValeriy/jeison)
+# jeison [![Build Status](https://travis-ci.org/SavchenkoValeriy/jeison.svg?branch=master)](https://travis-ci.org/SavchenkoValeriy/jeison)[![MELPA](https://melpa.org/packages/jeison-badge.svg)](https://melpa.org/#/jeison)
 
 *Jeison* is a library for transforming JSON objects (or *alist*s) into [EIEIO](https://www.gnu.org/software/emacs/manual/html_node/eieio/index.html "EIEIO manual") objects.
 
 ## Installation
 
-TODO: add to MELPA
+It's available on [Melpa](https://melpa.org/):
+
+<kbd>M-x package-install [RET] jeison [RET]</kbd>
+
+## Using in a package
+
+Add this to the header block at the top (see [Library-Headers](https://www.gnu.org/software/emacs/manual/html_node/elisp/Library-Headers.html#Library-Headers "Library-Headers")):
+
+``` emacs-lisp
+;; Package-Requires: ((jeison "1.0.0"))
+```
+
+Don't forget to add `require` command as well:
+
+``` emacs-lisp
+(require 'jeison)
+```
+
+Additionally, you might want to use [Cask](https://github.com/cask/cask) to manage package dependencies automatically.
 
 ## Main idea
 
@@ -315,3 +333,7 @@ $ cask exec ert-runner
 All contributions are most welcome!
 
 It might include any help: bug reports, questions on how to use it, feature suggestions, and documentation updates.
+
+## License
+
+[GPL-3.0](./LICENSE)
