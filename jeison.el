@@ -168,7 +168,8 @@ proceed with a nested JSON further on."
             ;; not a special case of parsing - return whatever we found
             (_ json))))
     ;; check that the parsed value matches the expected type...
-    (or (cl-typep result type)
+    (or (null result)
+        (cl-typep result type)
         (signal 'jeison-wrong-parsed-type
                 (list type result)))
     ;; ...and return it if it does
@@ -226,10 +227,13 @@ in the target class' constructor:
 SLOT is a jeison descriptor of an slot, i.e. `jeison--slot'.
 JSON is an `alist' representing a JSON object where we want information
 to be parsed from."
-  (list (or (oref slot initarg)
-            (oref slot name))
-        (jeison--read-internal
-         (oref slot type) json (oref slot path))))
+  (let ((slot-value (jeison--read-internal
+                     (oref slot type) json (oref slot path))))
+    (if (null slot-value)
+        nil
+      (list (or (oref slot initarg)
+                (oref slot name))
+            slot-value))))
 
 (defun jeison--read-path (json path)
   "Return nested JSON object found by the given list of keys PATH.
