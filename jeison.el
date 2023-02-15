@@ -1,10 +1,12 @@
 ;;; jeison.el --- A library for declarative JSON parsing -*- lexical-binding: t; -*-
 
+;; Copyright (c) 2023 B. Scott Michel (GNU/GPL Licence)
 ;; Copyright (c) 2019 Valeriy Savchenko (GNU/GPL Licence)
 
 ;; Authors: Valeriy Savchenko <sinmipt@gmail.com>
+;;          B. Scott Michel (scooter.phd@gmail.com)
 ;; URL: http://github.com/SavchenkoValeriy/jeison
-;; Version: 1.0.0
+;; Version: 1.1.0
 ;; Package-Requires: ((emacs "25.1") (dash "2.16.0"))
 ;; Keywords: lisp json data-types
 
@@ -26,14 +28,86 @@
 
 ;;; Commentary:
 
-;; Jeison is a library for transforming JSON objects (or `alist's) into
-;; EIEIO objects.
+;; 'jeison' is a library that transforms a JSON stream represented
+;; as an 'alist' or a naked 'alist' on its own into EIEIO/CLOS
+;; objects. New features since 1.0.0:
+;;
+;; - A 'vector-of' slot type constraint.  This is analogous to
+;;   'list-of'.
+;;
+;; - '(jeison-hash-table-of key-type element-type)' type constraint
+;;   maps JSON object member names to an 'element-type'. See the "Hash
+;;   Tables" documentation.
+;;
+;; - Uses the Emacs-native JSON parsing, if detected.  'jeison' will
+;;   fall back to the 'json.el' E-lisp package if native JSON support
+;;   is not available.
+;;
+;;   NOTE: 'jeison-false' is the meta-syntactic variable for JSON
+;;   'false' values -- native JSON defaults to ':false' whereas
+;;   'json.el' defaults to ':json-false'.  'jeison-false' is set to
+;;   the respective default, depending on the parser (either ':false'
+;;   or ':json-false'.) Use a let-binding around 'jeison-read' to
+;;   change 'jeison-false' to your preferred value when necessary.
+;;
+;; - A '(or null type)' type constraint is available, primarily to
+;;   accommodate optional values in the JSON input stream. You can use
+;;   ':initform nil' to initialize the slot; if the slot is not 'nil'
+;;   after reading the JSON stream, a value was present in the stream.
+;;
+;; - ':initform' is respected as the slot's default value if the input
+;;   JSON stream provides no replacement value. Alternatively, you can
+;;   use the '(or null type)' type constraint.
+
 
 ;;; Code:
+
 (require 'cl-lib)
 (require 'dash)
 (require 'eieio)
-(require 'json)
+
+(defvar jeison-debug-mode nil
+  "'jeison' debugging level.  0 = off, 5 = highest.")
+
+(defvar jeison-use-json-el nil
+  "t -> Strongly prefer 'json.el' to native JSON parser.")
+
+(if (and (fboundp 'json-available-p)
+         (json-available-p)
+         (not jeison-use-json-el))
+    ;; Native JSON available
+    (progn
+      (defvar jeison-false :false
+        "jeison: Native JSON parser: Value interpolated for 'false' in
+JSON. Consider let-binding this around your call to `json-read'
+instead of `setq'ing it.")
+      (defun jeison--read-json-string (inp)
+        (json-parse-string inp :object-type 'alist :false-object jeison-false))
+      (defun jeison--read-json-buffer (buf)
+        (save-excursion
+          (with-current-buffer buf
+            (goto-char (point-min))
+            (json-parse-buffer :object-type 'alist :false-object jeison-false)))))
+
+  ;; Nope. Go with the E-lisp JSON support
+  (progn
+    (require 'json)
+    (defvar jeison-false :json-false
+      "jeison: Native JSON parser: Value interpolated for 'false' in
+JSON. Consider let-binding this around your call to `json-read'
+instead of `setq'ing it.")
+    (defun jeison--read-json-string (inp)
+      ;; Ensure that json-read-from-string only produces assoc lists.
+      (let ((json-object-type 'alist)
+            (json-false jeison-false))
+        (json-read-from-string inp)))
+    (defun jeison--read-json-buffer (buf)
+      (save-excursion
+        (let ((json-object-type 'alist)
+              (json-false jeison-false))
+          (json-read-from-string (with-current-buffer buf
+                                   (goto-char (point-min))
+                                   (buffer-string))))))))
 
 (defmacro jeison-defclass (name superclasses slots &rest options-and-doc)
   "Define NAME as a new class derived from SUPERCLASS with SLOTS.
@@ -121,23 +195,53 @@ your needs, please consider declaring a separate class."
   (mapc (lambda (slot-descriptor) (jeison--set-path slot-descriptor nil))
         (jeison--class-slots class-name)))
 
-(defun jeison-read (type alist-or-json &optional path)
-  "Read TYPE from ALIST-OR-JSON by the given PATH.
+(defun jeison-read (type input-source &optional path)
+  "Read TYPE from INPUT-SOURCE by the given PATH.
 
-TYPE is a CL-defined type (should work with `cl-typep'), that means
-also that t is a valid type.
-ALIST-OR-JSON is either a `string' with raw JSON or an `alist' representing
-a JSON object where we want information to be parsed from.
+TYPE is a CL-defined type (should work with `cl-typep'), that
+means also that t is a valid type.
+INPUT-SOURCE is a `buffer' or `string' with raw JSON, or an `alist'
+representing a JSON object where we want information to be parsed
+from.
 PATH is a `list' of keys we should consequently find in JSON and
 proceed with a nested JSON further on."
   ;; read JSON from string into an alist and proceed
-  (let* ((json (if (stringp alist-or-json)
-                   (json-read-from-string alist-or-json)
-                 alist-or-json)))
-    (jeison--read-internal type json path)))
+  (jeison--read-internal type
+                         (cond ((bufferp input-source) (jeison--read-json-buffer input-source))
+                               ((stringp input-source) (jeison--read-json-string input-source))
+                               (t input-source))
+                         path))
 
-(define-error 'jeison-wrong-parsed-type
-  "Jeison encountered unexpected type" 'error)
+(define-error 'jeison-error "jeison generic error" 'error)
+(define-error 'jeison-wrong-parsed-type "jeison encountered unexpected type"
+  'jeison-error)
+(define-error 'jeison-invalid-symbol "jeison invalid symbol converson"
+  'jeison-error)
+
+;; Extend eieio's (and cl-lib's) type checking to include 'vector-of',
+;; analogous to 'list-of'.  This should really be in eieio-core.el
+;; (adapted from that code. :-)
+(cl-deftype jeison-vector-of (elem-type)
+  `(and vectorp
+        (satisfies ,(lambda (vec)
+                      (cl-every (lambda (elem) (cl-typep elem elem-type))
+                                vec)))))
+
+(cl-deftype jeison-hash-table-of (key-type elem-type)
+  `(and hash-table-p
+        (satisfies ,(and
+                     (or (stringp key-type)
+                         (symbolp key-type))
+                     (lambda (htab)
+                      (let ((snickers t))
+                        ;; maphash ALWAYS returns nil.
+                        (maphash (lambda (key value)
+                                   (setq snickers (and snickers
+                                                       (cl-typep key key-type)
+                                                       (cl-typep value elem-type))))
+                                 htab)
+                        ;; ... because snickers really satisfies (sm). :-)
+                        snickers))))))
 
 (defun jeison--read-internal (type json &optional path)
   "Read TYPE from JSON by the given PATH.
@@ -148,30 +252,34 @@ JSON is an `alist' representing a JSON object where we want information
 to be parsed from.
 PATH is a `list' of keys we should consequently find in JSON and
 proceed with a nested JSON further on."
-  (let* ((json (jeison--read-path json path))
+  (let* ((json-stream (jeison--read-path json path))
          (result
           (pcase type
             ;; type is a jeison class: read JSON as a class
-            ((pred jeison-class-p) (jeison--read-class type json))
+            ((pred jeison-class-p) (jeison--read-class type json-stream))
             ;; type is a homogeneous list of some sort
-            (`(list-of ,element-type)
-             ;; first we should check that JSON object itself is
-             ;; some sort of sequence
-             (or (cl-typep json 'sequence)
-                 (signal 'jeison-wrong-parsed-type
-                         (list 'sequence json)))
-             ;; then we should iterate of this JSON sequence
-             ;; and parse element-type (retrieved from the type)
-             ;; from each element
-             (mapcar (lambda (element)
-                       (jeison--read-internal element-type element)) json))
+            (`(list-of ,element-type) (jeison--read-array element-type json-stream))
+            (`(jeison-vector-of ,element-type) (apply #'vector (jeison--read-array element-type json-stream)))
+            (`(jeison-hash-table-of ,key-type ,element-type)
+              (jeison--read-name-value key-type element-type json-stream))
+            ;; Slot value can be 'nil' or something legit...
+            ((or `(or null ,element-type)
+                 `(or ,element-type null))
+             (jeison--read-internal element-type json-stream))
+            ;; Convert string to symbol (useful for JSON member strings as hash keys and
+            ;; lists items used as hash keys.)
+            (`symbol (cond ((stringp json-stream) (intern json-stream))
+                           (t (signal 'jeison-invalid-symbol
+                                      (format "expected string, got %s, stream: %s"
+                                              (type-of json-stream)
+                                              json-stream)))))
             ;; not a special case of parsing - return whatever we found
-            (_ json))))
+            (_ json-stream))))
     ;; check that the parsed value matches the expected type...
-    (or (cl-typep result type)
+    (or (null result)
+        (cl-typep result type)
         (signal 'jeison-wrong-parsed-type
-                (list type result)))
-    ;; ...and return it if it does
+                (list (format "expected %s, got %s, result: %s" type (type-of result) result))))
     result))
 
 (defclass jeison--slot nil
@@ -226,10 +334,13 @@ in the target class' constructor:
 SLOT is a jeison descriptor of an slot, i.e. `jeison--slot'.
 JSON is an `alist' representing a JSON object where we want information
 to be parsed from."
-  (list (or (oref slot initarg)
-            (oref slot name))
-        (jeison--read-internal
-         (oref slot type) json (oref slot path))))
+  (let ((slot-value (jeison--read-internal
+                     (oref slot type) json (oref slot path))))
+    (if (null slot-value)
+        nil
+      (list (or (oref slot initarg)
+                (oref slot name))
+            slot-value))))
 
 (defun jeison--read-path (json path)
   "Return nested JSON object found by the given list of keys PATH.
@@ -265,6 +376,32 @@ JSON is an `alist' representing JSON object."
                            (+ (length json) element) element)))
     ;; list -> it is a function call with path elements as its arguments
     (list (jeison--apply-function element json))))
+
+(defun jeison--read-array (type json)
+  "Read an array of TYPE elements from the JSON stream, returning a
+list of TYPE elements."
+  (unless (cl-typep json 'sequence)
+    (signal 'jeison-wrong-parsed-type
+            (list (format "expected sequence, got %s" (type-of json)))))
+  ;; Iterate over the JSON array, transforming each element into a
+  ;; 'type' value.
+  (mapcar (lambda (element) (jeison--read-internal type element)) json))
+
+(defun jeison--read-name-value (key-type value-type json)
+  "Read a sequence of name/value pairs (object members) from the
+JSON stream, wherein the names have the type KEY-TYPE and the
+values have the type VALUE-TYPE, returning a hash table."
+  ;; Minor performance optimization: use 'eq' for symbol-type keys,
+  ;; 'equal' for strings.
+  (let ((htab (if (eq key-type 'symbol)
+                  (make-hash-table :test 'eq)
+                (make-hash-table :test 'equal))))
+    (dolist (elt json)
+      ;; Keep this 'let', in case you need to do debugging. :-)
+      (let ((key (car elt))
+            (val (jeison--read-internal value-type (cdr elt))))
+        (puthash (if (eq key-type 'symbol) key (symbol-name key)) val htab)))
+    htab))
 
 (defun jeison--apply-function (function-and-args json)
   "Parse FUNCTION-AND-ARGS and apply it to JSON.
@@ -398,4 +535,5 @@ CLASS-OR-CLASS-NAME can be a symbol name of the class or class itself."
     class-or-class-name))
 
 (provide 'jeison)
+
 ;;; jeison.el ends here

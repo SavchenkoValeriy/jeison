@@ -56,21 +56,21 @@
 
 (ert-deftest jeison:check-read-path-basic ()
   (should (equal 42 (jeison--read-path
-                     (json-read-from-string "{\"a\": {\"b\": {\"c\": 42}}}")
+                     (jeison--read-json-string "{\"a\": {\"b\": {\"c\": 42}}}")
                      '(a b c)))))
 
 (ert-deftest jeison:check-read-path-index ()
   (let ((json "{\"a\": [{\"b\": 42}, {\"b\": 11}, {\"b\": 100}]}"))
     (should (equal 42 (jeison--read-path
-                       (json-read-from-string json)
+                       (jeison--read-json-string json)
                        '(a 0 b))))
     (should (equal 100 (jeison--read-path
-                        (json-read-from-string json)
+                        (jeison--read-json-string json)
                         '(a -1 b))))))
 
 (ert-deftest jeison:check-read-path-string ()
   (should (equal 42 (jeison--read-path
-                     (json-read-from-string "{\"a\": {\"b\": {\"c\": 42}}}")
+                     (jeison--read-json-string "{\"a\": {\"b\": {\"c\": 42}}}")
                      (list "a" "b" "c")))))
 
 (ert-deftest jeison:check-read-basic ()
@@ -109,6 +109,22 @@
     (should (equal '(1 15 30)
                    (mapcar (lambda (element) (oref element x)) (oref parsed a))))
     (should (equal '("hello" "jeison" "enthusiasts")
+                   (oref parsed b)))))
+
+(ert-deftest jeison:check-read-vector ()
+  (jeison-defclass jeison:jeison-class-a nil ((x :initarg :x)))
+  (jeison-defclass jeison:jeison-class-b nil
+    ((a :initarg :a :type (jeison-vector-of jeison:jeison-class-a))
+     (b :initarg :b :type (jeison-vector-of string))))
+  (let* ((parsed (jeison-read
+                  jeison:jeison-class-b
+                  "{
+                  \"a\": [{\"x\": 1}, {\"x\": 15}, {\"x\": 30}],
+                  \"b\": [\"hello\", \"jeison\", \"enthusiasts\"]
+                  }")))
+    (should (equal [1 15 30]
+                   (apply #'vector (mapcar (lambda (element) (oref element x)) (oref parsed a)))))
+    (should (equal ["hello" "jeison" "enthusiasts"]
                    (oref parsed b)))))
 
 (ert-deftest jeison:check-read-wrong-type ()
@@ -191,7 +207,7 @@
   (seq-find (lambda (x) (jeison-read 'boolean x 'awesome)) candidates))
 
 (ert-deftest jeison:check-read-function-dynamic-choice ()
-  (let ((json-false nil))
+  (let ((jeison-false nil))
     (should (equal
              42
              (jeison-read 'integer "{
@@ -217,5 +233,110 @@
                                     }
                                   }"
                           '(a (jeison:filter-candidates b) number))))))
+
+(ert-deftest jeison:check-hash-table-of-type ()
+  (jeison-defclass jeison:jeison-htab-string nil
+    ((reply :initarg :reply :type (jeison-hash-table-of string t))))
+  (jeison-defclass jeison:jeison-htab-symbol nil
+    ((reply :initarg :reply :type (jeison-hash-table-of symbol t))))
+  (let ((answer-symbol (jeison-read jeison:jeison-htab-symbol
+                                    "{ \"reply\": { \"client-1a4ff5b056e2b11\" : { \"foo\": 1, \"bar\": false } } }"))
+        (answer-string (jeison-read jeison:jeison-htab-string
+                                    "{ \"reply\": { \"client-1a4ff5b056e2b11\" : { \"foo\": 1, \"bar\": false } } }")))
+    (should (and
+             (with-slots ((client-table reply)) answer-symbol
+               (let ((client-data (gethash 'client-1a4ff5b056e2b11 client-table)))
+                 (and (not (null client-data))
+                      (null (gethash 'non-existent client-table)))))
+             (with-slots ((client-table reply)) answer-string
+               (let ((client-data (gethash "client-1a4ff5b056e2b11" client-table)))
+                 (and (not (null client-data))
+                      (null (gethash "non-existent" client-table)))))))))
+
+(ert-deftest jeison:check-hash-table-of-hash-table-of-type ()
+  (jeison-defclass jeison:version-thing ()
+    ((major :initarg :major :initform 0 :type integer)
+     (minor :initarg :minor :initform 0 :type integer)))
+  (jeison-defclass jeison:jeison-thing nil
+    ((jsonFile :initarg :jsonFile :initform "invalid")
+     (kind :initarg kind :initform "nothing")
+     (version :initarg :version :type jeison:version-thing)))
+  (jeison-defclass jeison:jeison-class nil
+    ((reply :initarg :reply :type (jeison-hash-table-of symbol (jeison-hash-table-of symbol jeison:jeison-thing)))))
+  (let ((answer (jeison-read jeison:jeison-class "{
+        \"reply\" :
+        {
+            \"client-1aa66f801e65edda\" :
+            {
+                \"codemodel-v2\" :
+                {
+                    \"jsonFile\" : \"codemodel-v2-bd9606760e25788500f7.json\",
+                    \"kind\" : \"codemodel\",
+                    \"version\" :
+                    {
+                        \"major\" : 2,
+                        \"minor\" : 4
+                    }
+                }
+            },
+            \"client-1aa66f801e65beef\" :
+            {
+                \"codemodel-v2\" :
+                {
+                    \"jsonFile\" : \"codemodel-v2-bd9606760e292887f0f7.json\",
+                    \"kind\" : \"codemodel\",
+                    \"version\" :
+                    {
+                        \"major\" : 2,
+                        \"minor\" : 4
+                    }
+                }
+            }
+        }
+}")))
+    (should (with-slots ((client-table reply)) answer
+              (let ((client-1 (gethash 'client-1aa66f801e65edda client-table))
+                    (client-2 (gethash 'client-1aa66f801e65beef client-table)))
+                (and (not (null client-1))
+                     (not (null (gethash 'codemodel-v2 client-1)))
+                     (not (null client-2))
+                     (null (gethash 'non-existent client-table))))))))
+
+(ert-deftest jeison:check-read-from-buffer ()
+  (with-temp-buffer
+    (insert "{
+  \"a\":
+  {
+    \"b\":
+    {
+      \"c\": 42
+    }
+  }
+}")
+    (goto-char (point-min))
+    (should (equal 42 (jeison-read t (current-buffer) '(a b c))))))
+
+(ert-deftest jeison:check-optional-element ()
+  (jeison-defclass jeison:version-opt-test-thing ()
+    ((major :initarg :major :initform 0 :type integer)
+     (minor :initarg :minor :initform nil :type (or null integer))
+     (patch :initarg :patch :initform nil :type (or null integer))))
+  (jeison-defclass jeison:jeison-opt-test-thing nil
+    ((jsonFile :initarg :jsonFile :initform "invalid")
+     (kind :initarg kind :initform "nothing")
+     (version :initarg :version :type jeison:version-opt-test-thing)))
+  (let ((answer (jeison-read jeison:jeison-opt-test-thing "{
+  \"jsonFile\" : \"codemodel-v2-bd9606760e25788500f7.json\",
+  \"kind\" : \"codemodel\",
+  \"version\" :
+  {
+    \"major\" : 2,
+    \"minor\" : 4
+  }
+}")))
+    (should (with-slots (version) answer
+              (and (not (null version))
+                   (with-slots (minor patch) version
+                     (and (not (null minor)) (null patch))))))))
 
 ;;; jeison-test.el ends here
