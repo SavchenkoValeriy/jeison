@@ -17,49 +17,17 @@ Notable enhancements include:
 - New type constraints: `jeison-vector-of`, `jeison-hash-table-of` and `(or null
   type)`
 
-  - `:type (jeison-vector-of type)` supports vectors of things. This is an
-    alternative to `list-of` things in a `:type` constraint.
+  - `:type (jeison-vector-of type)` is an alternative to `list-of` things in a
+    `:type` constraint.
 
-  - `:type (jeison-hash-table-of key-type value-type)` supports hash
-    tables, where the values are `value-type`. The `key-type` can be
-    `string` or `symbol`.
+  - `:type (jeison-hash-table-of key-type value-type)` supports hash tables,
+    with `symbol` or `string` as the `key-type` and the values are
+    `value-type`.
 
   - `:type (or null type)` and `:type (or type null)` allows you to initilize
-    a slot to `nil`. `jeison-read` can parse and subsequently set the slot to
-    `type`.
+    a slot to `nil` and detect when optional values occur in the JSON input
+    stream.
 
-    The primary use for `:type (or null type)` is handling optional
-    JSON elements and you want to use `nil` to determine if the
-    element was present in the JSON stream. For example:
-
-      ``` emacs-lisp
-      (jeison-defclass something ()
-        ((mandatory-elt :initarg :mandataory
-                        :initform -1
-                        :type integer)
-         (optional-elt  :initarg :optional
-                        :initform nil
-                        :type (or null string))))
-      ```
-
-    In your code:
-
-      ``` emacs-lisp
-      (let ((thing (jeison-read something json-input)))
-        (with-slots (optional-elt) thing
-          (when optional-slot
-            ;; do something with optional-slot
-          )))
-      ```
-
-    `(or null type)` is also useful with the `jeison-hash-table-of`
-    constraint, because you can't properly initialize a slot by
-    calling a function (`defclass` quotes `:initform` arguments.) You
-    either need to write an `initialize-instance :before` generic
-    method for your class and initialize the slot there, or initialize
-    the slot to `nil` and use this constraint. Alternatively, you can
-    leave out `:initform` arguments for hash tables, if the hash table
-    isn't optional in the JSON input stream.
 
 ## Installation
 
@@ -253,7 +221,7 @@ We get these results:
 Another JSON's basic data type is *array*. *Jeison* can deal with arrays in
 two ways:
 
-* Return the value created by the JSON parser, do no conversions, Just leave
+* Return the value created by the JSON parser, do no conversions, just leave
   it alone.
 
 ``` emacs-lisp
@@ -264,9 +232,9 @@ two ways:
 The default JSON array type for both the native JSON parser and `json.el` is
 *vector*. Unsurprisingly, this example returns an integer vector.
 
-The `t` argument to `jeison-read` permits `jeison-read` to read any legitimate
-type from the JSON stream, so you can mix integers, strings and symbols in the
-array:
+The `t` argument to the `jeison-read` type argument instructs `jeison-read` to
+read any legitimate type from the JSON stream, as opposed to a specific type,
+so you can mix integers, strings and symbols in the array:
 
 ``` emacs-lisp
 (jeison-read t "{\"numbers\": [1, \"foo!\", 10.0, 45, 100]}" 'numbers)
@@ -289,6 +257,11 @@ the returned value's type to ensure it is a list of integers. Similarly,
 *jeison* defines a `jeison-vector-of` type that instructs *jeison-read* to
 convert the JSON array to an integer vector and causes EIEIO to ensure that
 the returned value is, in fact, an integer vector.
+
+*STYLE NOTE*: Prefer `list-of` over `jeison-vector-of` unless your JSON arrays
+are lengthy or you need to explicitly index `vector` elements. Elisp treats
+`vector` as an immutable value, which means that it is effectively read-only
+once read from the JSON stream.
 
 This mechanism also allows *jeison* to parse **lists of nested
 objects**. Let's continue our "John Johnson" example and add skill
@@ -360,7 +333,7 @@ For the following JSON object:
 
 ### Indexed elements
 
-Sometimes, though, it is not required to process the whole list. Sometimes we
+Sometimes, though, processing the whole list is not required. Sometimes we
 want just one element, especially in case of heterogeneous arrays. For this
 use case, *jeison* supports indices in its `:path` properties.
 
@@ -409,10 +382,9 @@ the end):
 
 ### Hash Tables
 
-There are times when the JSON stream's path doesn't directly
-correspond to lists or EIEIO objects, or the objects are indirectly
-referenced by another object's member name. The `jeison-hash-table-of`
-type constraint addresses these use cases.
+Use the `jeison-hash-table-of` type constraint when the JSON stream's path
+doesn't directly correspond to lists or EIEIO objects or the objects are
+indirectly referenced by another object's member name.
 
 Let's modify the "Skills" example as follows (note: you can mark,
 <kbd>M-w</kbd> copy, yank and execute the code in *Interactive Emacs
@@ -454,21 +426,21 @@ Lisp Mode* (<kbd>M-x ielm</kbd>)):
 ```
 
 Note 1: The `:initform` value in a `jeison-hash-table-of`-typed slot
-declaration is not particularly important because *jeison* intializes
-and sets the object's slot values before EIEIO checks the newly
-created object's type constraints. **Do not** use `nil` as the
-initializer because this will cause an invalid type failure when
-`jeison-defclass` defines the class and EIEIO type checks the
-`:initform` value.
+declaration is not particularly important because *jeison* intializes and sets
+the object's slot values before EIEIO checks the newly created object's type
+constraints. **Do not** use `nil` as the initializer because this will cause
+an invalid type failure when `jeison-defclass` defines the class and EIEIO
+type checks the `:initform` value.
 
-Note 2: This part of the example uses symbols as the hash key
-type. You can also use strings, which is discussed further on. The
-`"skill-1"`, `"skill-2"` and `"skill-3"` object member strings in the
-`skills` JSON object are converted to intern-ed symbols, i.e.,
-`'skill-1`, `'skill-2` and `'skill-3`. This means that you need to use
-`list-of symbol` to ensure that the skill reference strings in the
-`skill-refs` arrays are also converted into symbols to avoid a type
-mismatch when looking up elements with `gethash`.
+Note 2: This part of the example uses symbols as the hash table's key
+type. You can also use strings, which is discussed further on. Matching the
+hash table's key type and the reference key type is *vitally important*. This
+means that you need to use `list-of symbol` to ensure that the skill reference
+strings in the `skill-refs` arrays are also converted into symbols to avoid a
+type mismatch when looking up elements with `gethash`. Consequently, the
+`"skill-1"`, `"skill-2"` and `"skill-3"` object member strings in the `skills`
+JSON object are converted to intern-ed symbols, i.e., `'skill-1`, `'skill-2`
+and `'skill-3`, as are the `skill-refs` reference names.
 
 Using the following JSON object as an Emacs Lisp string:
 
@@ -539,34 +511,20 @@ The code below demonstrates how to use the `skills` hash table and
 symbols as keys:
 
 ```emacs-lisp
-(let* ((people-data (jeison-read jeison-people json-people)))
-    ;; Do useful things with the data (in this case, just print):
-    (mapcar (lambda (person)
-              (princ (format "%s skills: %s\n"
-                             (oref person name)
-                             (mapconcat (lambda (the-skill-ref)
-                                          (let ((the-skill (gethash the-skill-ref
-                                                                    (oref people-data skills))))
-                                            (oref the-skill name)))
-                                        (oref person skill-refs)
-                                        ", "))))
-            (oref people-data people))
-    (pp (oref people-data skills)))
+(setq people-data (jeison-read jeison-people json-people))
 ```
-
-The output in the *ielm* buffer should be:
-
+```emacs-lisp
+(mapcar (lambda (person)
+          (list (oref person name)
+                (mapconcat (lambda (the-skill-ref)
+                             (oref (gethash the-skill-ref (oref people-data skills))
+                                   name))
+                           (oref person skill-refs)
+                           ", ")))
+        (oref people-data people))
+;; => (("Johnson" "Programming, Communication")
+;;     ("Smith" "Design, Communication"))
 ```
-Johnson skills: Programming, Communication
-Smith skills: Design, Communication
-#s(hash-table size 65 test eq rehash-size 1.5 rehash-threshold 0.8125 data
-              (skill-1 #s(jeison-skill "Programming" "Can code like Richard S or Linus T")
-                       skill-2 #s(jeison-skill "Design" "Can think out loud, structure code systems")
-                       skill-3 #s(jeison-skill "Communication" "Can explain complicated things to social scientists")))
-```
-
-The contents of the `skills` hash table are pretty-printed to show the
-keys are symbols.
 
 `jeison-hash-table-of` also accepts `string` for the hash table's key
 type. Simply change the definitions of `jeison-people` and
@@ -579,8 +537,7 @@ type. Simply change the definitions of `jeison-people` and
            :initform ()
            :type (list-of jeison-person))
    ;; Change 2: Skills are indirectly referenced via the
-   ;; skills hash table. Note that the hash table's key
-   ;; type is now 'string'.
+   ;; skills hash table, using "string" as the key type:
    (skills :initarg :skills
            :type (jeison-hash-table-of string jeison-skill))))
 ```
@@ -589,183 +546,60 @@ type. Simply change the definitions of `jeison-people` and
   ((name :initarg :name :path (personal name last))
    (job :initarg :job :type jeison-job)
    ;; Change 3: skills are a list of skill references
-   ;; to the skills hash table. Note that the references
-   ;; are a list of strings:
+   ;; to the skills hash table -- match the references' type
+   ;; to the hash table's key type (string):
    (skill-refs :initarg :skill-refs
                :initform ()
                :type (list-of string))))
 ```
 
 You don't need to change the demonstration code -- re-executing the
-demonstration code after changing the class definitions produces the
-same output:
+demonstration code after changing the class definitions produces the same
+output:
 
 ```emacs-lisp
 ;; Same code as above... just repeated here...
-
-(let* ((people-data (jeison-read jeison-people json-people)))
-    ;; Do useful things with the data (in this case, just print):
-    (mapcar (lambda (person)
-              (princ (format "%s skills: %s\n"
-                             (oref person name)
-                             (mapconcat (lambda (the-skill-ref)
-                                          (let ((the-skill (gethash the-skill-ref
-                                                                    (oref people-data skills))))
-                                            (oref the-skill name)))
-                                        (oref person skill-refs)
-                                        ", "))))
-            (oref people-data people))
-    (pp (oref people-data skills)))
+(mapcar (lambda (person)
+          (list (oref person name)
+                (mapconcat (lambda (the-skill-ref)
+                             (oref (gethash the-skill-ref (oref people-data skills))
+                                   name))
+                           (oref person skill-refs)
+                           ", ")))
+        (oref people-data people))
+;; => (("Johnson" "Programming, Communication")
+;;     ("Smith" "Design, Communication"))
 ```
 
-And the output -- the `skills` hash table keys are now strings:
-
-```
-Johnson skills: Programming, Communication
-Smith skills: Design, Communication
-#s(hash-table size 65 test equal rehash-size 1.5 rehash-threshold 0.8125 data
-              ("skill-1" #s(jeison-skill "Programming" "Can code like Richard S or Linus T")
-                         "skill-2" #s(jeison-skill "Design" "Can think out loud, structure code systems")
-                         "skill-3" #s(jeison-skill "Communication" "Can explain complicated things to social scientists")))
-```
-
-Using `symbol` or `string` is a matter of personal preference. There
-is a slight performance advantage to using symbols because the hash
-table uses `eq` for comparisons, vice `equal` for strings. However, if
-the hash table has a short lifetime, the performance advantage is
+*STYLE NOTE:* Using `symbol` or `string` is a matter of personal
+preference. `symbol` keys have a slight performance advantage over `string`
+keys because the hash table uses `eq` for comparisons, vice `equal` for
+strings. If the hash table has a short lifetime, the performance advantage is
 likely minimal.
 
 ### `(or null type)`: Optional JSON elements
 
-The `(or null type)` type constraint helps detect when optional JSON
-elements are present in an input stream. This allows you to specify
-`nil` as the slot's `:initform` in addition to its expected type if it
-receives a value from `jeison-read`. If the slot's value isn't
-initialized to a non-`nil` value by `jieson-read`, the `nil` `:initform`
-value is preserved.
+Detecting the presence of optional JSON stream elements is the `(or null
+type)` type constraint's principal use case. You initialize the slot to `nil`
+via `:initform`. If the slot receives a value from `jeison-read`, the slot's
+value will be whatever `jeison-read` parsed.
 
-Let's modify `jeison-person` so that the `skill-refs` skill references
-are optional:
-
-``` emacs-lisp
-(jeison-defclass jeison-person nil
-  ((name :initarg :name :path (personal name last))
-   (job :initarg :job :type jeison-job)
-   ;; skill-refs are optional:
-   (skill-refs :initarg :skill-refs
+```emacs-lisp
+(jeison-defclass has-optional-elts ()
+  ((a :initarg :a
+      :type string)
+   (optional-b :initarg :optional
                :initform nil
-               :type (or null (list-of string)))))
+               :type (or null (list-of integer)))))
 ```
-
-Then, we add "Tommy Twiddler", who has no skills, to the `json-people`
-JSON object:
-
-``` emacs-lisp
-(setq json-people "{
-  \"people\": [
-    {
-      \"personal\": {
-        \"address\": { },
-        \"name\": {
-          \"first\": \"John\",
-          \"last\": \"Johnson\"
-        }
-      },
-      \"job\": {
-        \"company\": \"Good Inc.\",
-        \"title\": \"CEO\",
-        \"location\": {
-          \"country\": \"Norway\",
-          \"city\": \"Oslo\"
-        }
-      },
-      \"skill-refs\": [
-        \"skill-1\",
-        \"skill-3\" 
-      ]
-    },
-    {
-      \"personal\": {
-        \"address\": { },
-        \"name\": {
-          \"first\": \"Sammy\",
-          \"last\": \"Smith\"
-        }
-      },
-      \"job\": {
-        \"company\": \"Good Inc.\",
-        \"title\": \"VP, Marketing\",
-        \"location\": {
-          \"country\": \"USA\",
-          \"city\": \"Peoria\"
-        }
-      },
-      \"skill-refs\": [
-        \"skill-2\",
-        \"skill-3\" 
-      ]
-    },
-    {
-      \"personal\": {
-        \"address\": { },
-        \"name\": {
-          \"first\": \"Tommy\",
-          \"last\": \"Twiddler\"
-        }
-      },
-      \"job\": {
-        \"company\": \"Good Inc.\",
-        \"title\": \"Mail Distribution\",
-        \"location\": {
-          \"country\": \"USA\",
-          \"city\": \"Peoria\"
-        }
-      }
-    }
-  ],
-  \"skills\": {
-    \"skill-1\": {
-      \"name\": \"Programming\",
-      \"description\": \"Can code like Richard S or Linus T\"
-    },
-    \"skill-2\": {
-      \"name\": \"Design\",
-      \"description\": \"Can think out loud, structure code systems\"
-    },
-    \"skill-3\": {
-      \"name\": \"Communication\",
-      \"description\": \"Can explain complicated things to social scientists\"
-    }
-  }
-}")
+```emacs-lisp
+(setq without-optional (jeison-read 'has-optional-elts "{ \"a\": \"a is mandatory\" }"))
+(oref without-optional optional-b) ;; => nil
 ```
-
-When you execute the code below:
-
-``` emacs-lisp
-(let* ((people-data (jeison-read jeison-people json-people)))
-  (mapcar (lambda (person)
-            (princ (format "%s skills: %s\n"
-                           (oref person name)
-                           (if (oref person skill-refs)
-                               ; The person has skill references
-                               (mapconcat (lambda (the-skill-ref)
-                                            (let ((the-skill (gethash (intern the-skill-ref)
-                                                                      (oref people-data skills))))
-                                              (oref the-skill name)))
-                                          (oref person skill-refs)
-                                          ", ")
-                               ; No skill references for this person...
-                               "Missing or unknown skills"))))
-          (oref people-data people)))
-```
-
-You should see this output in *ielm*:
-
-```
-Johnson skills: Programming, Communication
-Smith skills: Design, Communication
-Twiddler skills: Missing or unknown skills
+```emacs-lisp
+(setq with-optional (jeison-read 'has-optional-elts
+                                 "{ \"a\": \"a is mandatory\", \"optional-b\": [1, 3, 5, 7] }"))
+(oref with-optional optional-b) ;; => (1 3 5 7)
 ```
 
 ### Turning regular classes into jeison classes

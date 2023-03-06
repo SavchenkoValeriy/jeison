@@ -66,7 +66,8 @@
 (require 'dash)
 (require 'eieio)
 
-(defvar jeison-debug-mode nil
+;; Not used in the code, but may be useful in the future...
+(defvar jeison-debug-mode 0
   "'jeison' debugging level.  0 = off, 5 = highest.")
 
 (defvar jeison-use-json-el nil
