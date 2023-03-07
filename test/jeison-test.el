@@ -326,7 +326,20 @@
                 (and (not (null client-1))
                      (not (null (gethash 'codemodel-v2 client-1)))
                      (not (null client-2))
-                     (null (gethash 'non-existent client-table))))))))
+                     (null (gethash 'non-existent client-table))
+
+                     ;; All of these tests succeed: puthash isn't picky about
+                     ;; what it stashes. The caveat: the hash table uses 'eq'
+                     ;; for comparisons.
+                     (puthash "client-123456" "client-123456 data" client-table)
+                     (puthash "client-7890ab" [1 2 3 4 5] client-table)
+                     (puthash [1 3 5] "vector data" client-table)
+                     ;; These 'gethash'-es fail because strings don't compare
+                     ;; with 'eq'.
+                     (null (gethash "client-123456" client-table))
+                     (null (gethash "client-7890ab" client-table))
+                     ;; And neither do vectors.
+                     (null (gethash [1 3 5] client-table))))))))
 
 (ert-deftest jeison:check-read-from-buffer ()
   (with-temp-buffer
