@@ -62,7 +62,7 @@
 
 ;;; Code:
 
-(require 'cl-lib)
+(eval-when-compile (require 'cl-lib))
 (require 'dash)
 (require 'eieio)
 
@@ -230,19 +230,16 @@ proceed with a nested JSON further on."
 
 (cl-deftype jeison-hash-table-of (key-type elem-type)
   `(and hash-table-p
-        (satisfies ,(and
-                     (or (stringp key-type)
-                         (symbolp key-type))
-                     (lambda (htab)
-                      (let ((snickers t))
-                        ;; maphash ALWAYS returns nil.
+        (satisfies ,(lambda (htab)
+                      (let ((snickers (or (eq key-type 'string)
+                                          (eq key-type 'symbol))))
                         (maphash (lambda (key value)
                                    (setq snickers (and snickers
                                                        (cl-typep key key-type)
                                                        (cl-typep value elem-type))))
                                  htab)
                         ;; ... because snickers really satisfies (sm). :-)
-                        snickers))))))
+                        snickers)))))
 
 (defun jeison--read-internal (type json &optional path)
   "Read TYPE from JSON by the given PATH.

@@ -234,6 +234,32 @@
                                   }"
                           '(a (jeison:filter-candidates b) number))))))
 
+(ert-deftest jeison:check-hash-table-of-invalid-key-type ()
+  ;; NOTE: EIEIO checks the type constraint when it creates a new instance,
+  ;; not when the code invokes 'defclass'.  Consequently, EIEIO emits the
+  ;; 'invalid-slot-type' signal __only__ when the code invokes
+  ;; 'make-instance'.
+  (should (and (condition-case ()
+                   (progn
+                     (jeison-defclass jeison:treif-key-type-class ()
+                       ((foo :initarg :foo :type (jeison-hash-table-of integer string))))
+                     (make-instance jeison:treif-key-type-class :foo (make-hash-table))
+                     ;; Should not make it here...
+                     (ert-fail "jeison-defclass admits invalid hash table key type."))
+                 (invalid-slot-type
+                  ;; Success
+                  t))
+
+               ;; This succeeds:
+               (jeison-defclass jeison:kosher-symbol-key-type-class ()
+                 ((foo :initarg :foo :type (jeison-hash-table-of symbol string))))
+               (make-instance jeison:kosher-symbol-key-type-class :foo (make-hash-table))
+
+               ;; And so does this one:
+               (jeison-defclass jeison:kosher-string-key-type-class ()
+                       ((foo :initarg :foo :type (jeison-hash-table-of string string))))
+               (make-instance jeison:kosher-string-key-type-class :foo (make-hash-table)))))
+
 (ert-deftest jeison:check-hash-table-of-type ()
   (jeison-defclass jeison:jeison-htab-string nil
     ((reply :initarg :reply :type (jeison-hash-table-of string t))))
