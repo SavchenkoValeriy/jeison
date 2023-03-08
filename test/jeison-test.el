@@ -234,11 +234,14 @@
                                   }"
                           '(a (jeison:filter-candidates b) number))))))
 
-(ert-deftest jeison:check-hash-table-of-invalid-key-type ()
+(ert-deftest jeison:check-cl-deftype-jeison-hash-table-of ()
   ;; NOTE: EIEIO checks the type constraint when it creates a new instance,
   ;; not when the code invokes 'defclass'.  Consequently, EIEIO emits the
   ;; 'invalid-slot-type' signal __only__ when the code invokes
   ;; 'make-instance'.
+  ;;
+  ;; This code exercises (exorcises?) the cl-deftype type constraint
+  ;; for jeison-hash-table-of.
   (should (and (condition-case ()
                    (progn
                      (jeison-defclass jeison:treif-key-type-class ()
@@ -292,30 +295,18 @@
   (let ((answer (jeison-read jeison:jeison-class "{
         \"reply\" :
         {
-            \"client-1aa66f801e65edda\" :
-            {
-                \"codemodel-v2\" :
-                {
+            \"client-1aa66f801e65edda\" : {
+                \"codemodel-v2\" : {
                     \"jsonFile\" : \"codemodel-v2-bd9606760e25788500f7.json\",
                     \"kind\" : \"codemodel\",
-                    \"version\" :
-                    {
-                        \"major\" : 2,
-                        \"minor\" : 4
-                    }
+                    \"version\" : { \"major\" : 2,\"minor\" : 4 }
                 }
             },
-            \"client-1aa66f801e65beef\" :
-            {
-                \"codemodel-v2\" :
-                {
+            \"client-1aa66f801e65beef\" : {
+                \"codemodel-v2\" : {
                     \"jsonFile\" : \"codemodel-v2-bd9606760e292887f0f7.json\",
                     \"kind\" : \"codemodel\",
-                    \"version\" :
-                    {
-                        \"major\" : 2,
-                        \"minor\" : 4
-                    }
+                    \"version\" : { \"major\" : 2,\"minor\" : 4 }
                 }
             }
         }
@@ -326,20 +317,43 @@
                 (and (not (null client-1))
                      (not (null (gethash 'codemodel-v2 client-1)))
                      (not (null client-2))
-                     (null (gethash 'non-existent client-table))
+                     (null (gethash 'non-existent client-table))))))))
 
-                     ;; All of these tests succeed: puthash isn't picky about
-                     ;; what it stashes. The caveat: the hash table uses 'eq'
-                     ;; for comparisons.
-                     (puthash "client-123456" "client-123456 data" client-table)
-                     (puthash "client-7890ab" [1 2 3 4 5] client-table)
-                     (puthash [1 3 5] "vector data" client-table)
-                     ;; These 'gethash'-es fail because strings don't compare
-                     ;; with 'eq'.
-                     (null (gethash "client-123456" client-table))
-                     (null (gethash "client-7890ab" client-table))
-                     ;; And neither do vectors.
-                     (null (gethash [1 3 5] client-table))))))))
+(ert-deftest jeison:check-invalid-hash-key-spec ()
+  ;; Ensure jeison-read's hash table key type checking doesn't admit something
+  ;; other than string or symbol.
+  (jeison-defclass jeison:integer-hash-key-class ()
+    ((a :initarg :a :type (jeison-hash-table-of integer string))))
+  (jeison-defclass jeison:vector-hash-key-class ()
+    ((a :initarg :a :type (jeison-hash-table-of vector string))))
+  (should (and
+           (condition-case nil
+              (progn
+                (jeison-read jeison:integer-hash-key-class "{ \"key\": \"value\" }")
+                (ert-fail "jeison-read admitted hash table with integer key."))
+             (jeison-invalid-key-type t))
+           (condition-case nil
+              (progn
+                (jeison-read jeison:vector-hash-key-class "{ \"key\": \"value\" }")
+                (ert-fail "jeison-read admitted hash table with vector key."))
+             (jeison-invalid-key-type t)))))
+
+(ert-deftest jeison:wrong-hash-value-type ()
+  ;; Exercise 'jeison-wrong-parsed-type' with hash tables.
+  (jeison-defclass jeison:hash-value-entity ()
+    ((a :initarg :a :initform "default" :type string)
+     (b :initarg :b :initform 'undefined :type symbol)
+     (c :initarg :c :initform [] :type (jeison-vector-of integer))))
+  (let ((json-stream "{ \"key-1\": { \"a\" : \"a's value\", \"b\": \"b-symbol-value\", \"c\": [99, 100, 101] } }"))
+    (should (and
+             (jeison-read '(jeison-hash-table-of string jeison:hash-value-entity) json-stream)
+             (jeison-read '(jeison-hash-table-of symbol jeison:hash-value-entity) json-stream)
+             (condition-case ()
+                 (jeison-read '(jeison-hash-table-of string (list-of integer)) json-stream)
+               (jeison-wrong-parsed-type t))
+             (condition-case ()
+                 (jeison-read '(jeison-hash-table-of symbol (list-of integer)) json-stream)
+               (jeison-wrong-parsed-type t))))))
 
 (ert-deftest jeison:check-read-from-buffer ()
   (with-temp-buffer

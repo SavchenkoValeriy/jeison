@@ -213,10 +213,13 @@ proceed with a nested JSON further on."
                                (t input-source))
                          path))
 
+;; jeison's family of signal codes:
 (define-error 'jeison-error "jeison generic error" 'error)
 (define-error 'jeison-wrong-parsed-type "jeison encountered unexpected type"
   'jeison-error)
 (define-error 'jeison-invalid-symbol "jeison invalid symbol converson"
+  'jeison-error)
+(define-error 'jeison-invalid-key-type "invalid key type for jeison-hash-table-of"
   'jeison-error)
 
 ;; Extend eieio's (and cl-lib's) type checking to include 'vector-of',
@@ -259,7 +262,11 @@ proceed with a nested JSON further on."
             (`(list-of ,element-type) (jeison--read-array element-type json-stream))
             (`(jeison-vector-of ,element-type) (apply #'vector (jeison--read-array element-type json-stream)))
             (`(jeison-hash-table-of ,key-type ,element-type)
-              (jeison--read-name-value key-type element-type json-stream))
+              (if (or (eq key-type 'string)
+                      (eq key-type 'symbol))
+                  (jeison--read-name-value key-type element-type json-stream)
+                (signal 'jeison-invalid-key-type
+                        (list (format "%s is not supported as a key type" key-type)))))
             ;; Slot value can be 'nil' or something legit...
             ((or `(or null ,element-type)
                  `(or ,element-type null))
@@ -277,7 +284,7 @@ proceed with a nested JSON further on."
     (or (null result)
         (cl-typep result type)
         (signal 'jeison-wrong-parsed-type
-                (list (format "expected %s, got %s, result: %s" type (type-of result) result))))
+                (list (format "expected %s, got %s, stream: %s" type (type-of result) result))))
     result))
 
 (defclass jeison--slot nil
