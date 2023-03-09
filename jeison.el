@@ -208,9 +208,10 @@ PATH is a `list' of keys we should consequently find in JSON and
 proceed with a nested JSON further on."
   ;; read JSON from string into an alist and proceed
   (jeison--read-internal type
-                         (cond ((bufferp input-source) (jeison--read-json-buffer input-source))
-                               ((stringp input-source) (jeison--read-json-string input-source))
-                               (t input-source))
+                         (funcall (cond ((bufferp input-source) #'jeison--read-json-buffer)
+                                        ((stringp input-source) #'jeison--read-json-string)
+                                        (t #'identity))
+                                  input-source)
                          path))
 
 ;; jeison's family of signal codes:
